@@ -11,13 +11,25 @@ import com.marsraver.WledFx.animation.CrazyBeesAnimation
 import com.marsraver.WledFx.animation.DistortionWavesAnimation
 import com.marsraver.WledFx.animation.GeqAnimation
 import com.marsraver.WledFx.animation.LedAnimation
+import com.marsraver.WledFx.animation.ScrollingTextAnimation
+import com.marsraver.WledFx.animation.SinDotsAnimation
 import com.marsraver.WledFx.animation.SnakeAnimation
+import com.marsraver.WledFx.animation.RippleRainbowAnimation
+import com.marsraver.WledFx.animation.RainAnimation
 import com.marsraver.WledFx.animation.SwirlAnimation
+import com.marsraver.WledFx.animation.TartanAnimation
+import com.marsraver.WledFx.animation.WavingCellAnimation
+import com.marsraver.WledFx.animation.WaverlyAnimation
+import com.marsraver.WledFx.animation.SquareSwirlAnimation
+import com.marsraver.WledFx.animation.SoapAnimation
+import com.marsraver.WledFx.animation.SunRadiationAnimation
 import com.marsraver.WledFx.wled.WledArtNetClient
 import com.marsraver.WledFx.wled.WledClient
 import com.marsraver.WledFx.wled.model.WledConfig
 import com.marsraver.WledFx.wled.model.WledInfo
 import com.marsraver.WledFx.wled.model.WledState
+import javafx.geometry.Insets
+import javafx.geometry.Orientation
 import javafx.animation.AnimationTimer
 import javafx.application.Application
 import javafx.application.Platform
@@ -27,12 +39,16 @@ import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.Button
 import javafx.scene.control.ComboBox
 import javafx.scene.control.Label
+import javafx.scene.control.CheckBox
+import javafx.scene.control.Slider
+import javafx.scene.control.TextField
 import javafx.scene.layout.BorderPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 
 class WledSimulatorApp : Application() {
 
@@ -62,6 +78,17 @@ class WledSimulatorApp : Application() {
     private lateinit var startButton: Button
     private lateinit var statusLabel: Label
     private lateinit var animationComboBox: ComboBox<String>
+    private lateinit var brightnessSlider: Slider
+    private lateinit var brightnessLabel: Label
+    private var brightnessScale: Double = 1.0
+    private lateinit var textInputLabel: Label
+    private lateinit var textInputField: TextField
+    private lateinit var textSpeedLabel: Label
+    private lateinit var textSpeedSlider: Slider
+    private lateinit var randomCheckBox: CheckBox
+    private lateinit var randomIntervalField: TextField
+    private lateinit var randomIntervalLabel: Label
+    private var lastRandomSwitchNs: Long = 0L
 
     private val combinedWidth = 32
     private val combinedHeight = 32
@@ -88,6 +115,16 @@ class WledSimulatorApp : Application() {
                 "GEQ",
                 "Swirl",
                 "Akemi",
+                "Waving Cell",
+                "Tartan",
+                "Sun Radiation",
+                "Square Swirl",
+                "Soap",
+                "Scrolling Text",
+                "SinDots",
+                "Ripple Rainbow",
+                "Rain",
+                "Waverly",
                 "Color Test",
             )
             value = "Snake"
@@ -98,6 +135,9 @@ class WledSimulatorApp : Application() {
                     startSelectedAnimation()
                     startButton.text = "Stop Animation"
                 }
+            }
+            valueProperty().addListener { _, _, newValue ->
+                updateAnimationControls(newValue ?: "")
             }
         }
 
@@ -114,11 +154,96 @@ class WledSimulatorApp : Application() {
             }
         }
 
-        val controlsBox = HBox(10.0, statusLabel, Label("Animation:"), animationComboBox, startButton)
+        randomCheckBox = CheckBox("Random").apply {
+            isDisable = true
+            setOnAction {
+                val enabled = isSelected
+                updateRandomControls(enabled)
+                if (enabled) lastRandomSwitchNs = System.nanoTime()
+            }
+        }
+        randomIntervalField = TextField("10").apply {
+            prefColumnCount = 3
+            isDisable = true
+            textProperty().addListener { _, oldValue, newValue ->
+                if (newValue.isNullOrEmpty()) {
+                    if (text != oldValue) text = oldValue ?: "10"
+                    return@addListener
+                }
+                if (!newValue.matches(Regex("\\d+(?:\\.\\d+)?"))) {
+                    if (text != oldValue) text = oldValue ?: "10"
+                }
+            }
+        }
+        randomIntervalLabel = Label("sec").apply { isDisable = true }
+
+        brightnessLabel = Label("Brightness: 100%")
+        brightnessSlider = Slider(0.0, 100.0, 100.0).apply {
+            isShowTickMarks = true
+            isShowTickLabels = true
+            majorTickUnit = 25.0
+            blockIncrement = 5.0
+            orientation = Orientation.VERTICAL
+            valueProperty().addListener { _, _, newValue ->
+                val percent = newValue.toDouble().coerceIn(0.0, 100.0)
+                brightnessScale = percent / 100.0
+                brightnessLabel.text = "Brightness: ${percent.roundToInt()}%"
+            }
+        }
+
+        textInputLabel = Label("Scroll Text:")
+        textInputField = TextField("HELLO WLED").apply {
+            prefColumnCount = 14
+            textProperty().addListener { _, _, newValue ->
+                val animation = currentAnimation
+                if (animation is ScrollingTextAnimation) {
+                    animation.setText(newValue)
+                }
+            }
+        }
+        textSpeedLabel = Label("Scroll Speed: 100%")
+        textSpeedSlider = Slider(10.0, 100.0, 100.0).apply {
+            isShowTickMarks = true
+            isShowTickLabels = true
+            majorTickUnit = 30.0
+            blockIncrement = 5.0
+            valueProperty().addListener { _, _, newValue ->
+                val percent = newValue.toDouble().coerceIn(10.0, 100.0)
+                textSpeedLabel.text = "Scroll Speed: ${percent.roundToInt()}%"
+                val animation = currentAnimation
+                if (animation is ScrollingTextAnimation) {
+                    animation.setSpeedFactor(percent / 100.0)
+                }
+            }
+        }
+        textInputLabel.isVisible = false
+        textInputLabel.isManaged = false
+        textInputField.isVisible = false
+        textInputField.isManaged = false
+        textSpeedLabel.isVisible = false
+        textSpeedLabel.isManaged = false
+        textSpeedSlider.isVisible = false
+        textSpeedSlider.isManaged = false
+
+        val controlsBox = HBox(10.0,
+            statusLabel,
+            Label("Animation:"),
+            animationComboBox,
+            startButton,
+            randomCheckBox,
+            randomIntervalField,
+            randomIntervalLabel
+        )
         val vbox = VBox(10.0, controlsBox, canvas)
         val root = BorderPane(vbox)
+        val brightnessBox = VBox(12.0, brightnessLabel, brightnessSlider, textInputLabel, textInputField, textSpeedLabel, textSpeedSlider).apply {
+            padding = Insets(10.0)
+        }
+        root.right = brightnessBox
 
-        primaryStage.scene = Scene(root, 800.0, 900.0)
+        updateAnimationControls(animationComboBox.value ?: "")
+
+        primaryStage.scene = Scene(root, 860.0, 900.0)
         primaryStage.centerOnScreen()
         primaryStage.show()
         primaryStage.toFront()
@@ -173,6 +298,7 @@ class WledSimulatorApp : Application() {
                     statusLabel.text = "All devices connected!"
                     startButton.isDisable = false
                     animationComboBox.isDisable = false
+                    randomCheckBox.isDisable = false
                     startSelectedAnimation()
                     startButton.text = "Stop Animation"
                 }
@@ -181,6 +307,7 @@ class WledSimulatorApp : Application() {
                 Platform.runLater {
                     statusLabel.text = "Connected to ${connectedCount[0]}/${DEVICES.size} devices"
                     animationComboBox.isDisable = false
+                    randomCheckBox.isDisable = false
                 }
                 System.err.println("Warning: Only ${connectedCount[0]}/${DEVICES.size} devices connected")
             }
@@ -189,6 +316,7 @@ class WledSimulatorApp : Application() {
         primaryStage.setOnCloseRequest {
             stopAnimation()
             devices.forEach { connection ->
+                sendBlackFrame(connection)
                 connection.artNetClient.disconnect()
             }
             println("Disconnected from all WLED devices")
@@ -202,7 +330,7 @@ class WledSimulatorApp : Application() {
         }
 
         val selectedAnimation = animationComboBox.value
-        currentAnimation = when (selectedAnimation) {
+        val newAnimation: LedAnimation = when (selectedAnimation) {
             "Color Test" -> ColorTestAnimation()
             "Snake" -> SnakeAnimation()
             "Bouncing Ball" -> BouncingBallAnimation()
@@ -215,16 +343,33 @@ class WledSimulatorApp : Application() {
             "GEQ" -> GeqAnimation()
             "Swirl" -> SwirlAnimation()
             "Akemi" -> AkemiAnimation()
+            "Waving Cell" -> WavingCellAnimation()
+            "Tartan" -> TartanAnimation()
+            "Sun Radiation" -> SunRadiationAnimation()
+            "Square Swirl" -> SquareSwirlAnimation()
+            "Soap" -> SoapAnimation()
+            "Scrolling Text" -> ScrollingTextAnimation().apply {
+                setText(textInputField.text)
+                setSpeedFactor(textSpeedSlider.value / 100.0)
+            }
+            "SinDots" -> SinDotsAnimation()
+            "Ripple Rainbow" -> RippleRainbowAnimation()
+            "Rain" -> RainAnimation()
+            "Waverly" -> WaverlyAnimation()
             else -> {
                 System.err.println("Unknown animation: $selectedAnimation")
                 return
             }
         }
 
+        currentAnimation = newAnimation
+
         currentAnimation?.init(combinedWidth, combinedHeight)
         running.set(true)
         val lastUpdateTime = longArrayOf(System.nanoTime())
         val totalLeds = combinedWidth * combinedHeight
+
+        lastRandomSwitchNs = System.nanoTime()
 
         println("Starting ${currentAnimation?.getName()} animation with $totalLeds LEDs total (${combinedWidth}x$combinedHeight combined grid)")
 
@@ -253,7 +398,7 @@ class WledSimulatorApp : Application() {
                                 val globalX = deviceStartX + x
                                 val globalY = deviceStartY + y
                                 val localLedIndex = x * device.height + (device.height - 1 - y)
-                                val rgb = animation.getPixelColor(globalX, globalY)
+                                val rgb = applyBrightness(animation.getPixelColor(globalX, globalY))
                                 rgbData[localLedIndex * 3] = rgb[0]
                                 rgbData[localLedIndex * 3 + 1] = rgb[1]
                                 rgbData[localLedIndex * 3 + 2] = rgb[2]
@@ -264,6 +409,7 @@ class WledSimulatorApp : Application() {
                     }
 
                     drawCombinedSimulation()
+                    handleRandomSelection(now)
                 } catch (ex: Exception) {
                     System.err.println("Error sending frame: ${ex.message}")
                     ex.printStackTrace()
@@ -280,6 +426,16 @@ class WledSimulatorApp : Application() {
             is GeqAnimation -> animation.cleanup()
             is SwirlAnimation -> animation.cleanup()
             is AkemiAnimation -> animation.cleanup()
+            is WavingCellAnimation -> animation.cleanup()
+            is TartanAnimation -> animation.cleanup()
+            is WaverlyAnimation -> animation.cleanup()
+            is SunRadiationAnimation -> animation.cleanup()
+            is SquareSwirlAnimation -> animation.cleanup()
+            is SoapAnimation -> animation.cleanup()
+            is SinDotsAnimation -> animation.cleanup()
+            is RippleRainbowAnimation -> animation.cleanup()
+            is RainAnimation -> animation.cleanup()
+            is ScrollingTextAnimation -> animation.cleanup()
         }
     }
 
@@ -295,7 +451,7 @@ class WledSimulatorApp : Application() {
         val animation = currentAnimation ?: return
         for (globalY in 0 until combinedHeight) {
             for (globalX in 0 until combinedWidth) {
-                val rgb = animation.getPixelColor(globalX, globalY)
+                val rgb = applyBrightness(animation.getPixelColor(globalX, globalY))
                 val color = Color.rgb(rgb[0], rgb[1], rgb[2])
                 val pixelX = globalX * spacing + startX
                 val pixelY = globalY * spacing + startY
@@ -310,6 +466,86 @@ class WledSimulatorApp : Application() {
         gc.strokeLine(lineX, 0.0, lineX, canvas.height)
         val lineY = combinedHeight / 2 * spacing + startY
         gc.strokeLine(0.0, lineY, canvas.width, lineY)
+    }
+
+    private fun applyBrightness(rgb: IntArray): IntArray {
+        if (brightnessScale >= 0.999) return rgb
+        val scale = brightnessScale.coerceIn(0.0, 1.0)
+        val r = (rgb[0] * scale).roundToInt().coerceIn(0, 255)
+        val g = (rgb[1] * scale).roundToInt().coerceIn(0, 255)
+        val b = (rgb[2] * scale).roundToInt().coerceIn(0, 255)
+        return intArrayOf(r, g, b)
+    }
+
+    private fun sendBlackFrame(connection: DeviceConnection) {
+        val deviceLeds = connection.width * connection.height
+        val blackData = IntArray(deviceLeds * 3)
+        try {
+            connection.artNetClient.sendRgb(blackData, deviceLeds)
+        } catch (ex: Exception) {
+            System.err.println("Failed to send blackout frame to ${connection.config.name}: ${ex.message}")
+        }
+    }
+
+    private fun updateAnimationControls(animationName: String) {
+        val isScrollingText = animationName == "Scrolling Text"
+        textInputLabel.isVisible = isScrollingText
+        textInputField.isVisible = isScrollingText
+        textInputLabel.isManaged = isScrollingText
+        textInputField.isManaged = isScrollingText
+        textSpeedLabel.isVisible = isScrollingText
+        textSpeedLabel.isManaged = isScrollingText
+        textSpeedSlider.isVisible = isScrollingText
+        textSpeedSlider.isManaged = isScrollingText
+    }
+
+    private fun updateRandomControls(enabled: Boolean) {
+        randomIntervalField.isDisable = !enabled
+        randomIntervalLabel.isDisable = !enabled
+        if (!enabled && !randomIntervalField.text.isNullOrBlank()) {
+            val sanitized = randomIntervalSeconds()
+            randomIntervalField.text = sanitized.roundToInt().toString()
+        }
+    }
+
+    private fun randomIntervalSeconds(): Double {
+        val value = randomIntervalField.text.toDoubleOrNull()
+        val sanitized = when {
+            value == null -> 10.0
+            value < 1.0 -> 1.0
+            value > 3600.0 -> 3600.0
+            else -> value
+        }
+        if (value == null || value != sanitized) {
+            randomIntervalField.text = sanitized.roundToInt().toString()
+        }
+        return sanitized
+    }
+
+    private fun handleRandomSelection(now: Long) {
+        if (!randomCheckBox.isSelected) return
+        val items = animationComboBox.items
+        if (items.isEmpty()) return
+
+        val intervalSeconds = randomIntervalSeconds()
+        val intervalNs = (intervalSeconds * 1_000_000_000L).toLong()
+        if (now - lastRandomSwitchNs < intervalNs) return
+
+        lastRandomSwitchNs = now
+
+        val current = animationComboBox.value
+        val candidates = items.filter { it != current }
+        val selectionPool = if (candidates.isNotEmpty()) candidates else items
+        val newSelection = selectionPool.random()
+
+        Platform.runLater {
+            animationComboBox.value = newSelection
+            if (running.get()) {
+                stopAnimation()
+                startSelectedAnimation()
+                startButton.text = "Stop Animation"
+            }
+        }
     }
 
     companion object {
