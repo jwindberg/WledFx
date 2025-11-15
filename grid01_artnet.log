@@ -1,0 +1,150 @@
+ArtNet debug for Grid01 (universe 0, startLed=0): led=16 -> rgb(255,0,0), led=17 -> rgb(255,0,0), led=18 -> rgb(255,0,0), led=19 -> rgb(255,0,0), led=33 -> rgb(255,0,0), led=49 -> rgb(255,0,0), led=65 -> rgb(255,0,0), led=80 -> rgb(255,0,0), led=81 -> rgb(255,0,0), led=82 -> rgb(255,0,0), led=83 -> rgb(255,0,0), led=112 -> rgb(0,255,0), led=113 -> rgb(0,255,0), led=114 -> rgb(0,255,0), led=115 -> rgb(0,255,0), led=129 -> rgb(0,255,0), led=131 -> rgb(0,255,0), led=145 -> rgb(0,255,0), led=147 -> rgb(0,255,0), led=161 -> rgb(0,255,0), led=163 -> rgb(0,255,0)
+  LED 19 in universe: R=255, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 0, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 0, startLed=0): led=16 -> rgb(255,0,0), led=17 -> rgb(255,0,0), led=18 -> rgb(255,0,0), led=19 -> rgb(255,0,0), led=33 -> rgb(255,0,0), led=49 -> rgb(255,0,0), led=65 -> rgb(255,0,0), led=80 -> rgb(255,0,0), led=81 -> rgb(255,0,0), led=82 -> rgb(255,0,0), led=83 -> rgb(255,0,0), led=112 -> rgb(0,255,0), led=113 -> rgb(0,255,0), led=114 -> rgb(0,255,0), led=115 -> rgb(0,255,0), led=129 -> rgb(0,255,0), led=131 -> rgb(0,255,0), led=145 -> rgb(0,255,0), led=147 -> rgb(0,255,0), led=161 -> rgb(0,255,0), led=163 -> rgb(0,255,0)
+  LED 19 in universe: R=255, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=29 -> rgb(255,0,0), led=30 -> rgb(255,0,0), led=31 -> rgb(255,0,0), led=93 -> rgb(255,0,0), led=94 -> rgb(255,0,0), led=95 -> rgb(255,0,0), led=125 -> rgb(0,255,0), led=126 -> rgb(0,255,0), led=127 -> rgb(0,255,0), led=141 -> rgb(0,255,0), led=157 -> rgb(0,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=2 -> rgb(0,0,255), led=8 -> rgb(0,255,0), led=10 -> rgb(255,0,0), led=14 -> rgb(255,0,0), led=18 -> rgb(0,0,255), led=21 -> rgb(0,255,0), led=22 -> rgb(0,255,0), led=23 -> rgb(0,255,0), led=24 -> rgb(0,255,0), led=26 -> rgb(255,0,0), led=27 -> rgb(255,0,0), led=28 -> rgb(255,0,0), led=29 -> rgb(255,0,0), led=30 -> rgb(255,0,0), led=34 -> rgb(0,0,255), led=40 -> rgb(0,255,0), led=42 -> rgb(255,0,0), led=46 -> rgb(255,0,0), led=50 -> rgb(0,0,255), led=52 -> rgb(0,255,0), led=53 -> rgb(0,255,0), led=54 -> rgb(0,255,0), led=55 -> rgb(0,255,0), led=56 -> rgb(0,255,0), led=58 -> rgb(255,0,0), led=62 -> rgb(255,0,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=2 -> rgb(0,0,255), led=8 -> rgb(0,255,0), led=10 -> rgb(255,0,0), led=14 -> rgb(255,0,0), led=18 -> rgb(0,0,255), led=21 -> rgb(0,255,0), led=22 -> rgb(0,255,0), led=23 -> rgb(0,255,0), led=24 -> rgb(0,255,0), led=26 -> rgb(255,0,0), led=27 -> rgb(255,0,0), led=28 -> rgb(255,0,0), led=29 -> rgb(255,0,0), led=30 -> rgb(255,0,0), led=34 -> rgb(0,0,255), led=40 -> rgb(0,255,0), led=42 -> rgb(255,0,0), led=46 -> rgb(255,0,0), led=50 -> rgb(0,0,255), led=52 -> rgb(0,255,0), led=53 -> rgb(0,255,0), led=54 -> rgb(0,255,0), led=55 -> rgb(0,255,0), led=56 -> rgb(0,255,0), led=58 -> rgb(255,0,0), led=62 -> rgb(255,0,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=3 -> rgb(255,255,0), led=9 -> rgb(255,0,255), led=13 -> rgb(255,0,255), led=19 -> rgb(255,255,0), led=25 -> rgb(255,0,255), led=29 -> rgb(255,0,255), led=32 -> rgb(0,0,255), led=33 -> rgb(0,0,255), led=35 -> rgb(255,255,0), led=36 -> rgb(255,255,0), led=37 -> rgb(255,255,0), led=38 -> rgb(255,255,0), led=39 -> rgb(255,255,0), led=42 -> rgb(255,0,255), led=43 -> rgb(255,0,255), led=44 -> rgb(255,0,255)
+  LED 19 in universe: R=255, G=255, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=29 -> rgb(255,0,0), led=30 -> rgb(255,0,0), led=31 -> rgb(255,0,0), led=93 -> rgb(255,0,0), led=94 -> rgb(255,0,0), led=95 -> rgb(255,0,0), led=125 -> rgb(0,255,0), led=126 -> rgb(0,255,0), led=127 -> rgb(0,255,0), led=141 -> rgb(0,255,0), led=157 -> rgb(0,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=28 -> rgb(255,0,0), led=29 -> rgb(255,0,0), led=30 -> rgb(255,0,0), led=31 -> rgb(255,0,0), led=46 -> rgb(255,0,0), led=62 -> rgb(255,0,0), led=78 -> rgb(255,0,0), led=92 -> rgb(255,0,0), led=93 -> rgb(255,0,0), led=94 -> rgb(255,0,0), led=95 -> rgb(255,0,0), led=124 -> rgb(0,255,0), led=125 -> rgb(0,255,0), led=126 -> rgb(0,255,0), led=127 -> rgb(0,255,0), led=140 -> rgb(0,255,0), led=142 -> rgb(0,255,0), led=156 -> rgb(0,255,0), led=158 -> rgb(0,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=46 -> rgb(255,0,255), led=47 -> rgb(255,0,255), led=61 -> rgb(255,0,255), led=77 -> rgb(255,0,255), led=93 -> rgb(255,0,255), led=110 -> rgb(255,0,255), led=111 -> rgb(255,0,255), led=141 -> rgb(255,255,0), led=157 -> rgb(255,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=46 -> rgb(255,0,255), led=47 -> rgb(255,0,255), led=61 -> rgb(255,0,255), led=77 -> rgb(255,0,255), led=93 -> rgb(255,0,255), led=110 -> rgb(255,0,255), led=111 -> rgb(255,0,255), led=141 -> rgb(255,255,0), led=157 -> rgb(255,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=46 -> rgb(255,0,255), led=47 -> rgb(255,0,255), led=61 -> rgb(255,0,255), led=77 -> rgb(255,0,255), led=93 -> rgb(255,0,255), led=110 -> rgb(255,0,255), led=111 -> rgb(255,0,255), led=141 -> rgb(255,255,0), led=157 -> rgb(255,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=48 -> rgb(255,255,0), led=49 -> rgb(255,255,0), led=50 -> rgb(255,255,0), led=51 -> rgb(255,255,0), led=144 -> rgb(255,0,255), led=145 -> rgb(255,0,255), led=146 -> rgb(255,0,255), led=163 -> rgb(255,0,255)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=3 -> rgb(255,255,0), led=9 -> rgb(255,0,255), led=13 -> rgb(255,0,255), led=19 -> rgb(255,255,0), led=25 -> rgb(255,0,255), led=29 -> rgb(255,0,255), led=32 -> rgb(0,0,255), led=33 -> rgb(0,0,255), led=35 -> rgb(255,255,0), led=36 -> rgb(255,255,0), led=37 -> rgb(255,255,0), led=38 -> rgb(255,255,0), led=39 -> rgb(255,255,0), led=42 -> rgb(255,0,255), led=43 -> rgb(255,0,255), led=44 -> rgb(255,0,255)
+  LED 19 in universe: R=255, G=255, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=2 -> rgb(0,0,255), led=18 -> rgb(0,0,255), led=48 -> rgb(255,255,0), led=49 -> rgb(255,255,0), led=50 -> rgb(255,255,0), led=66 -> rgb(255,255,0), led=82 -> rgb(255,255,0), led=98 -> rgb(255,255,0), led=114 -> rgb(255,255,0), led=144 -> rgb(255,0,255), led=145 -> rgb(255,0,255), led=162 -> rgb(255,0,255)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=32 -> rgb(0,0,255), led=33 -> rgb(0,0,255), led=34 -> rgb(0,0,255), led=35 -> rgb(0,0,255), led=67 -> rgb(0,255,0), led=81 -> rgb(0,255,0), led=83 -> rgb(0,255,0), led=97 -> rgb(0,255,0), led=99 -> rgb(0,255,0), led=113 -> rgb(0,255,0), led=115 -> rgb(0,255,0), led=128 -> rgb(0,255,0), led=129 -> rgb(0,255,0), led=130 -> rgb(0,255,0), led=131 -> rgb(0,255,0), led=160 -> rgb(255,0,0), led=161 -> rgb(255,0,0), led=162 -> rgb(255,0,0), led=163 -> rgb(255,0,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=48 -> rgb(255,255,0), led=49 -> rgb(255,255,0), led=50 -> rgb(255,255,0), led=51 -> rgb(255,255,0), led=144 -> rgb(255,0,255), led=145 -> rgb(255,0,255), led=146 -> rgb(255,0,255), led=163 -> rgb(255,0,255)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): led=2 -> rgb(255,0,255), led=6 -> rgb(255,0,255), led=12 -> rgb(255,255,0), led=18 -> rgb(255,0,255), led=22 -> rgb(255,0,255), led=28 -> rgb(255,255,0), led=34 -> rgb(255,0,255), led=38 -> rgb(255,0,255), led=44 -> rgb(255,255,0), led=51 -> rgb(255,0,255), led=52 -> rgb(255,0,255), led=53 -> rgb(255,0,255), led=60 -> rgb(255,255,0)
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 2, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76
+ArtNet debug for Grid01 (universe 3, startLed=0): <none>
+  LED 19 in universe: R=0, G=0, B=0
+  DMX offset for LED 19: 58, Packet byte offset: 76

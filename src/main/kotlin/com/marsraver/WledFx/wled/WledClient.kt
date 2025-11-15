@@ -1,5 +1,6 @@
 package com.marsraver.WledFx.wled
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.marsraver.WledFx.wled.model.WledConfig
 import com.marsraver.WledFx.wled.model.WledInfo
@@ -49,6 +50,26 @@ class WledClient(private val ipAddress: String) {
             val config = mapper.readValue(input, WledConfig::class.java)
             conn.disconnect()
             return config
+        }
+    }
+
+    @Throws(Exception::class)
+    fun getConfigJson(): JsonNode {
+        val url = URL("http://$ipAddress/json/cfg")
+        val conn = url.openConnection() as HttpURLConnection
+        conn.connectTimeout = 400
+        conn.readTimeout = 800
+        conn.requestMethod = "GET"
+
+        if (conn.responseCode != HttpURLConnection.HTTP_OK) {
+            conn.disconnect()
+            throw Exception("Failed to get config json: HTTP ${conn.responseCode}")
+        }
+
+        conn.inputStream.use { input ->
+            val node = mapper.readTree(input)
+            conn.disconnect()
+            return node
         }
     }
 

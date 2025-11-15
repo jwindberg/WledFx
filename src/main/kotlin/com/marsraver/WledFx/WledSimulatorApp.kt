@@ -1,14 +1,20 @@
 package com.marsraver.WledFx
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.marsraver.WledFx.animation.AkemiAnimation
 import com.marsraver.WledFx.animation.BlackHoleAnimation
 import com.marsraver.WledFx.animation.BlobsAnimation
 import com.marsraver.WledFx.animation.BlurzAnimation
 import com.marsraver.WledFx.animation.BouncingBallAnimation
-import com.marsraver.WledFx.animation.ColorTestAnimation
 import com.marsraver.WledFx.animation.ColoredBurstsAnimation
 import com.marsraver.WledFx.animation.CrazyBeesAnimation
 import com.marsraver.WledFx.animation.DistortionWavesAnimation
+import com.marsraver.WledFx.animation.DnaAnimation
+import com.marsraver.WledFx.animation.DnaSpiralAnimation
+import com.marsraver.WledFx.animation.DriftAnimation
+import com.marsraver.WledFx.animation.DriftRoseAnimation
+import com.marsraver.WledFx.animation.FrizzlesAnimation
 import com.marsraver.WledFx.animation.GeqAnimation
 import com.marsraver.WledFx.animation.LedAnimation
 import com.marsraver.WledFx.animation.ScrollingTextAnimation
@@ -23,7 +29,7 @@ import com.marsraver.WledFx.animation.WaverlyAnimation
 import com.marsraver.WledFx.animation.SquareSwirlAnimation
 import com.marsraver.WledFx.animation.SoapAnimation
 import com.marsraver.WledFx.animation.SunRadiationAnimation
-import com.marsraver.WledFx.wled.WledArtNetClient
+import com.marsraver.WledFx.wled.WledDdpClient
 import com.marsraver.WledFx.wled.WledClient
 import com.marsraver.WledFx.wled.model.WledConfig
 import com.marsraver.WledFx.wled.model.WledInfo
@@ -48,6 +54,8 @@ import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
 import java.util.concurrent.atomic.AtomicBoolean
+import java.nio.file.Files
+import java.nio.file.Paths
 import kotlin.math.roundToInt
 
 class WledSimulatorApp : Application() {
@@ -57,6 +65,10 @@ class WledSimulatorApp : Application() {
         val name: String,
         val gridX: Int,
         val gridY: Int,
+        val logicalWidth: Int,
+        val logicalHeight: Int,
+        val offsetX: Int = 0,
+        val offsetY: Int = 0,
     )
 
     private data class DeviceConnection(
@@ -64,7 +76,7 @@ class WledSimulatorApp : Application() {
         val info: WledInfo,
         val wledConfig: WledConfig,
         val wledState: WledState,
-        val artNetClient: WledArtNetClient,
+        val artNetClient: WledDdpClient,
         val width: Int,
         val height: Int,
     )
@@ -89,12 +101,15 @@ class WledSimulatorApp : Application() {
     private lateinit var randomIntervalField: TextField
     private lateinit var randomIntervalLabel: Label
     private var lastRandomSwitchNs: Long = 0L
+    private var debugStartNs: Long = 0L
+    private var gridDebugLogged = false
 
-    private val combinedWidth = 32
-    private val combinedHeight = 32
+    private val combinedWidth = VIRTUAL_GRID_WIDTH
+    private val combinedHeight = VIRTUAL_GRID_HEIGHT
 
     override fun start(primaryStage: Stage) {
         primaryStage.title = "WLED 4x4 Grid Simulator"
+        println("Loaded layout '$LAYOUT_SOURCE' with ${DEVICES.size} panels; virtual grid ${combinedWidth}x$combinedHeight.")
 
         val spacing = CELL_SIZE * 1.2
         canvas = Canvas((combinedWidth * spacing + spacing / 2), (combinedHeight * spacing + spacing / 2))
@@ -103,31 +118,39 @@ class WledSimulatorApp : Application() {
         statusLabel = Label("Connecting to WLED devices...")
 
         animationComboBox = ComboBox<String>().apply {
-            items.addAll(
-                "Snake",
-                "Bouncing Ball",
-                "Colored Bursts",
+            val animationNames = listOf(
+                "Akemi",
                 "Black Hole",
                 "Blobs",
                 "Blurz",
+                "Bouncing Ball",
+                "Colored Bursts",
                 "Crazy Bees",
+                "DNA",
+                "DNA Spiral",
                 "Distortion Waves",
+                "Drift",
+                "Drift Rose",
+                "Frizzles",
                 "GEQ",
-                "Swirl",
-                "Akemi",
-                "Waving Cell",
-                "Tartan",
-                "Sun Radiation",
-                "Square Swirl",
-                "Soap",
+                "Rain",
+                "Ripple Rainbow",
                 "Scrolling Text",
                 "SinDots",
-                "Ripple Rainbow",
-                "Rain",
+                "Snake",
+                "Soap",
+                "Square Swirl",
+                "Sun Radiation",
+                "Swirl",
+                "Tartan",
                 "Waverly",
-                "Color Test",
-            )
-            value = "Snake"
+                "Waving Cell",
+            ).sorted()
+            items.addAll(animationNames)
+            value = when {
+                animationNames.contains("Snake") -> "Snake"
+                else -> animationNames.firstOrNull() ?: ""
+            }
             isDisable = true
             setOnAction {
                 if (running.get()) {
@@ -262,8 +285,8 @@ class WledSimulatorApp : Application() {
                     val config = client.getConfig()
                     val state = client.getState()
 
-                    val width = info.leds?.matrix?.w ?: 16
-                    val height = info.leds?.matrix?.h ?: 16
+                    val width = info.leds?.matrix?.w ?: deviceConfig.logicalWidth
+                    val height = info.leds?.matrix?.h ?: deviceConfig.logicalHeight
 
                     println("Connected! Device: ${info.name}")
                     println("Matrix size: ${width}x$height")
@@ -276,9 +299,10 @@ class WledSimulatorApp : Application() {
 
                     println("DMX Config - Universe: $universe, Port: $port, Start Address: $dmxStartAddress")
 
-                    val artNetClient = WledArtNetClient(info, universe, port, dmxStartAddress)
+                    // Using DDP protocol instead of Art-Net to avoid secondary color issues
+                    val artNetClient = WledDdpClient(info)
                     artNetClient.connect()
-                    println("Connected to Art-Net on port $port")
+                    println("Connected via DDP on port 4048")
 
                     val device = DeviceConnection(deviceConfig, info, config, state, artNetClient, width, height)
                     devices.add(device)
@@ -294,6 +318,9 @@ class WledSimulatorApp : Application() {
             }
 
             if (connectedCount[0] == DEVICES.size) {
+                // Query and display sync/dmx settings for all panels
+                querySyncSettings(DEVICES)
+                
                 Platform.runLater {
                     statusLabel.text = "All devices connected!"
                     startButton.isDisable = false
@@ -331,7 +358,6 @@ class WledSimulatorApp : Application() {
 
         val selectedAnimation = animationComboBox.value
         val newAnimation: LedAnimation = when (selectedAnimation) {
-            "Color Test" -> ColorTestAnimation()
             "Snake" -> SnakeAnimation()
             "Bouncing Ball" -> BouncingBallAnimation()
             "Colored Bursts" -> ColoredBurstsAnimation()
@@ -340,6 +366,11 @@ class WledSimulatorApp : Application() {
             "Blurz" -> BlurzAnimation()
             "Crazy Bees" -> CrazyBeesAnimation()
             "Distortion Waves" -> DistortionWavesAnimation()
+            "DNA" -> DnaAnimation()
+            "DNA Spiral" -> DnaSpiralAnimation()
+            "Drift" -> DriftAnimation()
+            "Drift Rose" -> DriftRoseAnimation()
+            "Frizzles" -> FrizzlesAnimation()
             "GEQ" -> GeqAnimation()
             "Swirl" -> SwirlAnimation()
             "Akemi" -> AkemiAnimation()
@@ -370,6 +401,8 @@ class WledSimulatorApp : Application() {
         val totalLeds = combinedWidth * combinedHeight
 
         lastRandomSwitchNs = System.nanoTime()
+        debugStartNs = lastRandomSwitchNs
+        gridDebugLogged = false
 
         println("Starting ${currentAnimation?.getName()} animation with $totalLeds LEDs total (${combinedWidth}x$combinedHeight combined grid)")
 
@@ -390,23 +423,66 @@ class WledSimulatorApp : Application() {
                     devices.forEach { device ->
                         val deviceLeds = device.width * device.height
                         val rgbData = IntArray(deviceLeds * 3)
-                        val deviceStartX = device.config.gridX * device.width
-                        val deviceStartY = device.config.gridY * device.height
+                        
+                        // All animations use the same standard rendering path
+                        // Standard mapping: gridX = column (X), gridY = row (Y)
+                        val baseX = device.config.gridX * device.width
+                        val baseY = device.config.gridY * device.height
 
-                        for (y in 0 until device.height) {
-                            for (x in 0 until device.width) {
-                                val globalX = deviceStartX + x
-                                val globalY = deviceStartY + y
-                                val localLedIndex = x * device.height + (device.height - 1 - y)
-                                val rgb = applyBrightness(animation.getPixelColor(globalX, globalY))
+                        for (localY in 0 until device.height) {
+                            for (localX in 0 until device.width) {
+                                val physicalX = baseX + localX
+                                val physicalY = baseY + localY
+
+                                // Direct mapping - match exactly how the simulator displays
+                                // Simulator draws: for (globalY in 0..height) for (globalX in 0..width) 
+                                //   animation.getPixelColor(globalX, globalY) at pixel (globalX, globalY)
+                                // Physical panels should sample the same coordinates
+                                val sampleX = (physicalX + device.config.offsetX).coerceIn(0, combinedWidth - 1)
+                                val sampleY = (physicalY + device.config.offsetY).coerceIn(0, combinedHeight - 1)
+
+                                val rgb = applyBrightness(animation.getPixelColor(sampleX, sampleY))
+                                // Standard row-major mapping: LED 0 at top-left (0,0), goes left-to-right, top-to-bottom
+                                // All grids use the same standard mapping
+                                val localLedIndex = localY * device.width + localX
                                 rgbData[localLedIndex * 3] = rgb[0]
                                 rgbData[localLedIndex * 3 + 1] = rgb[1]
                                 rgbData[localLedIndex * 3 + 2] = rgb[2]
                             }
                         }
 
+                        if (device.config.name.equals("Grid01", ignoreCase = true) && now - debugStartNs >= 5_000_000_000L && !gridDebugLogged) {
+                            gridDebugLogged = true
+                            val litIndices = mutableListOf<String>()
+                            for (idx in 0 until deviceLeds) {
+                                val r = rgbData[idx * 3]
+                                val g = rgbData[idx * 3 + 1]
+                                val b = rgbData[idx * 3 + 2]
+                                if ((r or g or b) != 0) {
+                                    // Use standard row-major mapping: LED index = y * width + x
+                                    val localX = idx % device.width
+                                    val localY = idx / device.width
+                                    litIndices += "LED[$idx](localX=$localX,localY=$localY)->RGB($r,$g,$b)"
+                                }
+                            }
+                            println("Grid01 rgbData check: Total LEDs=${deviceLeds}, Non-black LEDs=${litIndices.size}")
+                            if (litIndices.isNotEmpty()) {
+                                println("  Lit LEDs: ${litIndices.joinToString()}")
+                            } else {
+                                println("  All LEDs are black (0,0,0)")
+                            }
+                            // Also show raw bytes for LED 19 and neighbors
+                            println("  Raw bytes around LED[19]:")
+                            for (idx in 17..21) {
+                                val r = rgbData[idx * 3]
+                                val g = rgbData[idx * 3 + 1]
+                                val b = rgbData[idx * 3 + 2]
+                                println("    LED[$idx]: bytes[${idx*3}]=$r, bytes[${idx*3+1}]=$g, bytes[${idx*3+2}]=$b")
+                            }
+                        }
                         device.artNetClient.sendRgb(rgbData, deviceLeds)
                     }
+
 
                     drawCombinedSimulation()
                     handleRandomSelection(now)
@@ -462,9 +538,9 @@ class WledSimulatorApp : Application() {
 
         gc.stroke = Color.DARKGRAY
         gc.lineWidth = 0.5
-        val lineX = combinedWidth / 2 * spacing + startX
+        val lineX = startX + (combinedWidth / 2 * spacing) - spacing / 2
         gc.strokeLine(lineX, 0.0, lineX, canvas.height)
-        val lineY = combinedHeight / 2 * spacing + startY
+        val lineY = startY + (combinedHeight / 2 * spacing) - spacing / 2
         gc.strokeLine(0.0, lineY, canvas.width, lineY)
     }
 
@@ -552,18 +628,202 @@ class WledSimulatorApp : Application() {
         private const val CELL_SIZE = 10.0
         private const val FPS = 60
         private const val FRAME_INTERVAL_NS = 1_000_000_000L / FPS
+        private const val DEFAULT_LAYOUT_RESOURCE = "layouts/four_grid.json"
+        private const val FALLBACK_GRID_WIDTH = 32
+        private const val FALLBACK_GRID_HEIGHT = 32
 
-        private val DEVICES = arrayOf(
-            DeviceConfig("192.168.7.113", "Grid01", 0, 0),
-            DeviceConfig("192.168.7.226", "Grid02", 1, 0),
-            DeviceConfig("192.168.7.181", "Grid03", 0, 1),
-            DeviceConfig("192.168.7.167", "Grid04", 1, 1),
-        )
+        private val mapper = jacksonObjectMapper()
+
+        private data class LayoutLoadResult(val layout: LayoutConfig, val source: String)
+
+        private val layoutLoadResult = loadLayout()
+        private val LAYOUT = layoutLoadResult.layout
+        private val LAYOUT_SOURCE = layoutLoadResult.source
+
+        private val VIRTUAL_GRID_WIDTH: Int = computeVirtualWidth(LAYOUT)
+        private val VIRTUAL_GRID_HEIGHT: Int = computeVirtualHeight(LAYOUT)
+
+        private val DEVICES: Array<DeviceConfig> = LAYOUT.panels.map { panel ->
+            DeviceConfig(
+                ip = panel.ip,
+                name = panel.name,
+                gridX = panel.position.x,
+                gridY = panel.position.y,
+                logicalWidth = panel.size.width,
+                logicalHeight = panel.size.height,
+                offsetX = panel.offset?.x ?: 0,
+                offsetY = panel.offset?.y ?: 0,
+            )
+        }.toTypedArray()
 
         @JvmStatic
         fun main(args: Array<String>) {
             launch(WledSimulatorApp::class.java, *args)
         }
+        
+        private fun querySyncSettings(devices: Array<DeviceConfig>) {
+            println("\n========== Querying Sync/DMX Settings ==========")
+            for (deviceConfig in devices) {
+                try {
+                    println("\n--- ${deviceConfig.name} (${deviceConfig.ip}) ---")
+                    val client = WledClient(deviceConfig.ip)
+                    val info = client.getInfo()
+                    val configJson = client.getConfigJson()
+                    
+                    // Extract LED configuration from info endpoint
+                    val infoLeds = info.leds
+                    if (infoLeds != null) {
+                        println("LED Info (from /json/info):")
+                        println("  count: ${infoLeds.count}")
+                        println("  rgbw: ${infoLeds.rgbw}")
+                        println("  wv: ${infoLeds.wv}")
+                        val matrix = infoLeds.matrix
+                        if (matrix != null) {
+                            println("\n2D Matrix Info:")
+                            println("  w: ${matrix.w}, h: ${matrix.h}")
+                        }
+                    }
+                    
+                    // Check config JSON for LED settings
+                    val configLeds = configJson["leds"]
+                    if (configLeds != null) {
+                        println("\nLED Configuration (from /json/cfg):")
+                        println("  $configLeds")
+                    } else {
+                        println("\nLED Configuration: (not found in /json/cfg)")
+                        // Try to find color order in other places
+                        val hw = configJson["hw"]
+                        if (hw != null) {
+                            println("  Hardware config: $hw")
+                        }
+                    }
+                    
+                    // Extract sync settings
+                    val iface = configJson["if"]
+                    if (iface != null) {
+                        val sync = iface["sync"]
+                        val live = iface["live"]
+                        
+                        println("\nSync Settings:")
+                        if (sync != null) {
+                            println("  sync: $sync")
+                        } else {
+                            println("  sync: (null)")
+                        }
+                        
+                        println("\nLive/E131/Art-Net Settings:")
+                        if (live != null) {
+                            println("  enabled: ${live["en"]}")
+                            println("  port: ${live["port"]}")
+                            println("  timeout: ${live["timeout"]}")
+                            println("  maxbri: ${live["maxbri"]}")
+                            println("  offset: ${live["offset"]}")
+                            println("  rlm: ${live["rlm"]}")
+                            println("  mso: ${live["mso"]}")
+                            println("  mc: ${live["mc"]}")
+                            
+                            val dmx = live["dmx"]
+                            if (dmx != null) {
+                                println("\nDMX Settings:")
+                                println("  uni (universe): ${dmx["uni"]}")
+                                println("  addr (DMX start address): ${dmx["addr"]}")
+                                println("  mode: ${dmx["mode"]} (4=Multi RGB)")
+                                println("  dss: ${dmx["dss"]}")
+                                println("  seqskip: ${dmx["seqskip"]}")
+                                println("  e131prio: ${dmx["e131prio"]}")
+                            } else {
+                                println("\nDMX Settings: (null)")
+                            }
+                        } else {
+                            println("  live: (null)")
+                        }
+                    } else {
+                        println("Interface config: (null)")
+                    }
+                } catch (ex: Exception) {
+                    System.err.println("Failed to query ${deviceConfig.name}: ${ex.message}")
+                    ex.printStackTrace()
+                }
+            }
+            println("\n========== End Sync/DMX Settings ==========\n")
+        }
+
+        private fun computeVirtualWidth(layout: LayoutConfig): Int {
+            val explicit = layout.virtualGrid?.width ?: 0
+            if (explicit > 0) return explicit
+            return layout.panels.maxOfOrNull { panel ->
+                (panel.position.x * panel.size.width) + panel.size.width
+            } ?: FALLBACK_GRID_WIDTH
+        }
+
+        private fun computeVirtualHeight(layout: LayoutConfig): Int {
+            val explicit = layout.virtualGrid?.height ?: 0
+            if (explicit > 0) return explicit
+            return layout.panels.maxOfOrNull { panel ->
+                (panel.position.y * panel.size.height) + panel.size.height
+            } ?: FALLBACK_GRID_HEIGHT
+        }
+
+        private fun loadLayout(): LayoutLoadResult {
+            val layoutSettingRaw = System.getProperty("wledfx.layout", DEFAULT_LAYOUT_RESOURCE)
+            val (layoutSetting, explicitClasspath) = if (layoutSettingRaw.startsWith("classpath:")) {
+                layoutSettingRaw.removePrefix("classpath:") to true
+            } else {
+                layoutSettingRaw to false
+            }
+            val normalized = layoutSetting.removePrefix("/")
+
+            if (!explicitClasspath) {
+                val path = runCatching { Paths.get(layoutSetting) }.getOrNull()
+                if (path != null && Files.exists(path)) {
+                    Files.newInputStream(path).use { input ->
+                        val layout: LayoutConfig = mapper.readValue(input)
+                        return LayoutLoadResult(layout, path.toString())
+                    }
+                }
+            }
+
+            val resourceStream = Thread.currentThread().contextClassLoader?.getResourceAsStream(normalized)
+                ?: WledSimulatorApp::class.java.classLoader?.getResourceAsStream(normalized)
+            if (resourceStream != null) {
+                resourceStream.use { input ->
+                    val layout: LayoutConfig = mapper.readValue(input)
+                    return LayoutLoadResult(layout, "classpath:$normalized")
+                }
+            }
+
+            println("[Layout] Unable to find layout at '$layoutSettingRaw'. Falling back to default configuration.")
+            return LayoutLoadResult(defaultLayout(), "default")
+        }
+
+        private fun defaultLayout(): LayoutConfig {
+            val panels = listOf(
+                PanelConfig("Grid01", "192.168.7.113", GridPosition(0, 0), GridSize(16, 16), startCorner = "bottom-left", order = "column-major", serpentine = true),
+                PanelConfig("Grid02", "192.168.7.226", GridPosition(1, 0), GridSize(16, 16), startCorner = "bottom-left", order = "column-major", serpentine = true),
+                PanelConfig("Grid03", "192.168.7.181", GridPosition(0, 1), GridSize(16, 16), startCorner = "bottom-left", order = "column-major", serpentine = true),
+                PanelConfig("Grid04", "192.168.7.167", GridPosition(1, 1), GridSize(16, 16), startCorner = "bottom-left", order = "column-major", serpentine = true),
+            )
+            return LayoutConfig(panels, GridSize(FALLBACK_GRID_WIDTH, FALLBACK_GRID_HEIGHT))
+        }
+
+        private data class LayoutConfig(
+            val panels: List<PanelConfig>,
+            val virtualGrid: GridSize? = null,
+        )
+
+        private data class PanelConfig(
+            val name: String,
+            val ip: String,
+            val position: GridPosition,
+            val size: GridSize,
+            val startCorner: String? = null,
+            val order: String? = null,
+            val serpentine: Boolean? = null,
+            val offset: GridPosition? = null,
+        )
+
+        private data class GridPosition(val x: Int, val y: Int)
+        private data class GridSize(val width: Int, val height: Int)
     }
 }
 

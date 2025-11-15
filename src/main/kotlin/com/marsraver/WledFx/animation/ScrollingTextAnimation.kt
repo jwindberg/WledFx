@@ -171,7 +171,7 @@ class ScrollingTextAnimation : LedAnimation {
             }.toIntArray()
         }
 
-        private val FONT: Map<Char, IntArray> = mapOf(
+        internal val FONT: Map<Char, IntArray> = mapOf(
             ' ' to pattern("00000","00000","00000","00000","00000","00000","00000"),
             'A' to pattern("01110","10001","10001","11111","10001","10001","10001"),
             'B' to pattern("11110","10001","11110","10001","10001","10001","11110"),

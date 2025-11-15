@@ -1,0 +1,43 @@
+{
+  "panels": [
+    {
+      "name": "Grid00",
+      "ip": "192.168.7.113",
+      "position": { "x": 0, "y": 0 },
+      "size": { "width": 16, "height": 16 },
+      "startCorner": "bottom-left",
+      "order": "column-major",
+      "serpentine": true
+    },
+    {
+      "name": "Grid01",
+      "ip": "192.168.7.181",
+      "position": { "x": 1, "y": 0 },
+      "size": { "width": 16, "height": 16 },
+      "startCorner": "bottom-left",
+      "order": "column-major",
+      "serpentine": true
+    },
+    {
+      "name": "Grid02",
+      "ip": "192.168.7.167",
+      "position": { "x": 1, "y": 1 },
+      "size": { "width": 16, "height": 16 },
+      "startCorner": "bottom-left",
+      "order": "column-major",
+      "serpentine": true,
+      "offset": { "x": 0, "y": 1 }
+    },
+    {
+      "name": "Grid03",
+      "ip": "192.168.7.226",
+      "position": { "x": 0, "y": 1 },
+      "size": { "width": 16, "height": 16 },
+      "startCorner": "bottom-left",
+      "order": "column-major",
+      "serpentine": true,
+      "offset": { "x": 0, "y": 1 }
+    }
+  ],
+  "virtualGrid": { "width": 32, "height": 32 }
+}
