@@ -14,7 +14,7 @@
         </Root>
         
         <!-- Specific loggers can be configured here if needed -->
-        <Logger name="com.marsraver.WledFx" level="INFO" additivity="false">
+        <Logger name="com.marsraver.wledfx" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
     </Loggers>

@@ -46,7 +46,7 @@ dependencies {
 
 // Application plugin for creating executable JARs
 apply plugin: 'application'
-mainClassName = 'com.marsraver.WledFx.WledSimulatorApp'
+mainClassName = 'com.marsraver.wledfx.WledSimulatorApp'
 
 // Add task for running LED sketches with any layout
 tasks.register('runLed', JavaExec) {
@@ -87,7 +87,7 @@ tasks.register('runSimulator', JavaExec) {
     group = 'application'
     description = 'Runs the WLED simulator application'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.marsraver.WledFx.WledSimulatorApp'
+    mainClass = 'com.marsraver.wledfx.WledSimulatorApp'
 }
 
 // Add task for testing color order
@@ -95,7 +95,7 @@ tasks.register('testColorOrder', JavaExec) {
     group = 'application'
     description = 'Tests Art-Net color channel order'
     classpath = sourceSets.test.runtimeClasspath + sourceSets.main.runtimeClasspath
-    mainClass = 'com.marsraver.WledFx.wled.ArtNetColorOrderTest'
+    mainClass = 'com.marsraver.wledfx.wled.ArtNetColorOrderTest'
 }
 
 // Add task for scanning WLED devices
@@ -103,7 +103,7 @@ tasks.register('scanWled', JavaExec) {
     group = 'application'
     description = 'Scans the network for WLED devices'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.marsraver.WledFx.wled.WledNetworkScanner'
+    mainClass = 'com.marsraver.wledfx.wled.WledNetworkScanner'
 }
 
 tasks.named('test') {
