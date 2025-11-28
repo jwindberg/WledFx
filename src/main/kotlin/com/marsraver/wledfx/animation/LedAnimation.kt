@@ -41,6 +41,40 @@ interface LedAnimation {
     fun getName(): String
 
     /**
+     * Check if this animation supports color selection.
+     *
+     * @return true if the animation uses a primary color
+     */
+    fun supportsColor(): Boolean = false
+
+    /**
+     * Check if this animation supports palette selection.
+     *
+     * @return true if the animation uses a color palette
+     */
+    fun supportsPalette(): Boolean = false
+
+    /**
+     * Set the primary color for the animation (if supported).
+     *
+     * @param r red component (0-255)
+     * @param g green component (0-255)
+     * @param b blue component (0-255)
+     */
+    fun setColor(r: Int, g: Int, b: Int) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Set the color palette for the animation (if supported).
+     *
+     * @param palette array of RGB colors, each as [R, G, B] with values 0-255
+     */
+    fun setPalette(palette: Array<IntArray>) {
+        // Default implementation does nothing
+    }
+
+    /**
      * Draw the animation on the canvas (optional, for custom rendering).
      *
      * @param gc graphics context for drawing

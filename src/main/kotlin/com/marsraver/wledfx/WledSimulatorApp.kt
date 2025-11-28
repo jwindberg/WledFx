@@ -48,6 +48,7 @@ import javafx.scene.control.Label
 import javafx.scene.control.CheckBox
 import javafx.scene.control.Slider
 import javafx.scene.control.TextField
+import javafx.scene.control.ColorPicker
 import javafx.scene.layout.BorderPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
@@ -100,6 +101,10 @@ class WledSimulatorApp : Application() {
     private lateinit var randomCheckBox: CheckBox
     private lateinit var randomIntervalField: TextField
     private lateinit var randomIntervalLabel: Label
+    private lateinit var colorPicker: ColorPicker
+    private lateinit var colorLabel: Label
+    private lateinit var paletteComboBox: ComboBox<String>
+    private lateinit var paletteLabel: Label
     private var lastRandomSwitchNs: Long = 0L
     private var debugStartNs: Long = 0L
     private var gridDebugLogged = false
@@ -248,6 +253,41 @@ class WledSimulatorApp : Application() {
         textSpeedSlider.isVisible = false
         textSpeedSlider.isManaged = false
 
+        // Color picker
+        colorLabel = Label("Color:")
+        colorPicker = ColorPicker(Color.WHITE).apply {
+            isDisable = true
+            valueProperty().addListener { _, _, newColor ->
+                val animation = currentAnimation
+                if (animation != null && animation.supportsColor()) {
+                    val r = (newColor.red * 255).toInt().coerceIn(0, 255)
+                    val g = (newColor.green * 255).toInt().coerceIn(0, 255)
+                    val b = (newColor.blue * 255).toInt().coerceIn(0, 255)
+                    animation.setColor(r, g, b)
+                }
+            }
+        }
+        colorLabel.isDisable = true
+
+        // Palette selector
+        paletteLabel = Label("Palette:")
+        paletteComboBox = ComboBox<String>().apply {
+            items.addAll(PALETTES.keys.sorted())
+            value = "Default"
+            isDisable = true
+            setOnAction {
+                val selectedPalette = value
+                val animation = currentAnimation
+                if (animation != null && animation.supportsPalette() && selectedPalette != null) {
+                    val palette = PALETTES[selectedPalette]
+                    if (palette != null) {
+                        animation.setPalette(palette)
+                    }
+                }
+            }
+        }
+        paletteLabel.isDisable = true
+
         val controlsBox = HBox(10.0,
             statusLabel,
             Label("Animation:"),
@@ -257,8 +297,19 @@ class WledSimulatorApp : Application() {
             randomIntervalField,
             randomIntervalLabel
         )
-        val vbox = VBox(10.0, controlsBox, canvas)
-        val root = BorderPane(vbox)
+        
+        val colorPaletteBox = HBox(10.0,
+            colorLabel,
+            colorPicker,
+            paletteLabel,
+            paletteComboBox
+        ).apply {
+            padding = Insets(10.0)
+        }
+        
+        val mainContent = VBox(10.0, controlsBox, canvas, colorPaletteBox)
+        val root = BorderPane()
+        root.center = mainContent
         val brightnessBox = VBox(12.0, brightnessLabel, brightnessSlider, textInputLabel, textInputField, textSpeedLabel, textSpeedSlider).apply {
             padding = Insets(10.0)
         }
@@ -395,7 +446,34 @@ class WledSimulatorApp : Application() {
 
         currentAnimation = newAnimation
 
-        currentAnimation?.init(combinedWidth, combinedHeight)
+        val animation = newAnimation
+        animation.init(combinedWidth, combinedHeight)
+        
+        // Update UI controls based on animation capabilities
+        val supportsColor = animation.supportsColor()
+        val supportsPalette = animation.supportsPalette()
+        
+        colorPicker.isDisable = !supportsColor
+        colorLabel.isDisable = !supportsColor
+        paletteComboBox.isDisable = !supportsPalette
+        paletteLabel.isDisable = !supportsPalette
+        
+        // Apply color and palette if animation supports them
+        if (supportsColor) {
+            val currentColor = colorPicker.value
+            val r = (currentColor.red * 255).toInt().coerceIn(0, 255)
+            val g = (currentColor.green * 255).toInt().coerceIn(0, 255)
+            val b = (currentColor.blue * 255).toInt().coerceIn(0, 255)
+            animation.setColor(r, g, b)
+        }
+        if (supportsPalette) {
+            val selectedPalette = paletteComboBox.value ?: "Default"
+            val palette = PALETTES[selectedPalette]
+            if (palette != null) {
+                animation.setPalette(palette)
+            }
+        }
+        
         running.set(true)
         val lastUpdateTime = longArrayOf(System.nanoTime())
         val totalLeds = combinedWidth * combinedHeight
@@ -443,8 +521,13 @@ class WledSimulatorApp : Application() {
 
                                 val rgb = applyBrightness(animation.getPixelColor(sampleX, sampleY))
                                 // Standard row-major mapping: LED 0 at top-left (0,0), goes left-to-right, top-to-bottom
-                                // All grids use the same standard mapping
-                                val localLedIndex = localY * device.width + localX
+                                // Grid01 is mirrored, so invert X coordinate for LED index
+                                val mappedX = if (device.config.name == "Grid01") {
+                                    device.width - 1 - localX
+                                } else {
+                                    localX
+                                }
+                                val localLedIndex = localY * device.width + mappedX
                                 rgbData[localLedIndex * 3] = rgb[0]
                                 rgbData[localLedIndex * 3 + 1] = rgb[1]
                                 rgbData[localLedIndex * 3 + 2] = rgb[2]
@@ -573,6 +656,36 @@ class WledSimulatorApp : Application() {
         textSpeedLabel.isManaged = isScrollingText
         textSpeedSlider.isVisible = isScrollingText
         textSpeedSlider.isManaged = isScrollingText
+        
+        // Update color and palette controls based on current animation (if it exists)
+        // If animation doesn't exist yet, controls will be updated when animation starts
+        val animation = currentAnimation
+        if (animation != null) {
+            val supportsColor = animation.supportsColor()
+            val supportsPalette = animation.supportsPalette()
+            
+            colorPicker.isDisable = !supportsColor
+            colorLabel.isDisable = !supportsColor
+            paletteComboBox.isDisable = !supportsPalette
+            paletteLabel.isDisable = !supportsPalette
+            
+            // Apply current selections if animation supports them
+            if (supportsColor) {
+                val currentColor = colorPicker.value
+                val r = (currentColor.red * 255).toInt().coerceIn(0, 255)
+                val g = (currentColor.green * 255).toInt().coerceIn(0, 255)
+                val b = (currentColor.blue * 255).toInt().coerceIn(0, 255)
+                animation.setColor(r, g, b)
+            }
+            
+            if (supportsPalette) {
+                val selectedPalette = paletteComboBox.value ?: "Default"
+                val palette = PALETTES[selectedPalette]
+                if (palette != null) {
+                    animation.setPalette(palette)
+                }
+            }
+        }
     }
 
     private fun updateRandomControls(enabled: Boolean) {
@@ -633,6 +746,114 @@ class WledSimulatorApp : Application() {
         private const val FALLBACK_GRID_HEIGHT = 32
 
         private val mapper = jacksonObjectMapper()
+        
+        // WLED-style color palettes
+        private val PALETTES = mapOf(
+            "Default" to arrayOf(
+                intArrayOf(255, 0, 0),   // Red
+                intArrayOf(255, 127, 0), // Orange
+                intArrayOf(255, 255, 0), // Yellow
+                intArrayOf(0, 255, 0),   // Green
+                intArrayOf(0, 255, 255), // Cyan
+                intArrayOf(0, 0, 255),   // Blue
+                intArrayOf(127, 0, 255), // Purple
+                intArrayOf(255, 0, 255)  // Magenta
+            ),
+            "Rainbow" to arrayOf(
+                intArrayOf(255, 0, 0),   // Red
+                intArrayOf(255, 127, 0), // Orange
+                intArrayOf(255, 255, 0), // Yellow
+                intArrayOf(127, 255, 0), // Yellow-Green
+                intArrayOf(0, 255, 0),   // Green
+                intArrayOf(0, 255, 127), // Green-Cyan
+                intArrayOf(0, 255, 255), // Cyan
+                intArrayOf(0, 127, 255), // Cyan-Blue
+                intArrayOf(0, 0, 255),   // Blue
+                intArrayOf(127, 0, 255), // Blue-Purple
+                intArrayOf(255, 0, 255), // Magenta
+                intArrayOf(255, 0, 127)  // Magenta-Red
+            ),
+            "Party" to arrayOf(
+                intArrayOf(255, 0, 0),   // Red
+                intArrayOf(255, 0, 255), // Magenta
+                intArrayOf(0, 0, 255),   // Blue
+                intArrayOf(0, 255, 255), // Cyan
+                intArrayOf(0, 255, 0),   // Green
+                intArrayOf(255, 255, 0), // Yellow
+                intArrayOf(255, 127, 0), // Orange
+                intArrayOf(255, 0, 0)    // Red
+            ),
+            "Ocean" to arrayOf(
+                intArrayOf(0, 0, 128),   // Dark Blue
+                intArrayOf(0, 0, 255),   // Blue
+                intArrayOf(0, 127, 255), // Light Blue
+                intArrayOf(0, 255, 255), // Cyan
+                intArrayOf(64, 224, 208), // Turquoise
+                intArrayOf(0, 255, 255), // Cyan
+                intArrayOf(0, 127, 255), // Light Blue
+                intArrayOf(0, 0, 255)    // Blue
+            ),
+            "Forest" to arrayOf(
+                intArrayOf(0, 64, 0),    // Dark Green
+                intArrayOf(0, 128, 0),  // Green
+                intArrayOf(0, 255, 0),   // Bright Green
+                intArrayOf(127, 255, 0), // Yellow-Green
+                intArrayOf(255, 255, 0), // Yellow
+                intArrayOf(127, 255, 0), // Yellow-Green
+                intArrayOf(0, 255, 0),   // Bright Green
+                intArrayOf(0, 128, 0)   // Green
+            ),
+            "Lava" to arrayOf(
+                intArrayOf(0, 0, 0),    // Black
+                intArrayOf(64, 0, 0),   // Dark Red
+                intArrayOf(128, 0, 0),  // Red
+                intArrayOf(255, 0, 0),  // Bright Red
+                intArrayOf(255, 64, 0), // Orange-Red
+                intArrayOf(255, 127, 0), // Orange
+                intArrayOf(255, 64, 0), // Orange-Red
+                intArrayOf(255, 0, 0)   // Bright Red
+            ),
+            "Cloud" to arrayOf(
+                intArrayOf(64, 64, 64),  // Dark Gray
+                intArrayOf(128, 128, 128), // Gray
+                intArrayOf(192, 192, 192), // Light Gray
+                intArrayOf(255, 255, 255), // White
+                intArrayOf(192, 192, 192), // Light Gray
+                intArrayOf(128, 128, 128), // Gray
+                intArrayOf(64, 64, 64),  // Dark Gray
+                intArrayOf(32, 32, 32)   // Very Dark Gray
+            ),
+            "Sunset" to arrayOf(
+                intArrayOf(0, 0, 0),    // Black
+                intArrayOf(64, 0, 64),  // Dark Purple
+                intArrayOf(128, 0, 128), // Purple
+                intArrayOf(255, 0, 255), // Magenta
+                intArrayOf(255, 64, 0), // Orange-Red
+                intArrayOf(255, 127, 0), // Orange
+                intArrayOf(255, 191, 0), // Yellow-Orange
+                intArrayOf(255, 255, 0)  // Yellow
+            ),
+            "Heat" to arrayOf(
+                intArrayOf(0, 0, 0),    // Black
+                intArrayOf(64, 0, 0),   // Dark Red
+                intArrayOf(128, 0, 0),  // Red
+                intArrayOf(255, 0, 0),  // Bright Red
+                intArrayOf(255, 64, 0), // Orange-Red
+                intArrayOf(255, 127, 0), // Orange
+                intArrayOf(255, 191, 0), // Yellow-Orange
+                intArrayOf(255, 255, 255) // White
+            ),
+            "Ice" to arrayOf(
+                intArrayOf(0, 0, 0),    // Black
+                intArrayOf(0, 0, 64),   // Dark Blue
+                intArrayOf(0, 0, 128),  // Blue
+                intArrayOf(0, 0, 255),  // Bright Blue
+                intArrayOf(0, 64, 255), // Light Blue
+                intArrayOf(0, 127, 255), // Cyan-Blue
+                intArrayOf(0, 255, 255), // Cyan
+                intArrayOf(255, 255, 255) // White
+            )
+        )
 
         private data class LayoutLoadResult(val layout: LayoutConfig, val source: String)
 

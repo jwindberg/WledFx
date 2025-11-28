@@ -20,10 +20,17 @@ class RainAnimation : LedAnimation {
     private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<IntArray>>
     private val drops = mutableListOf<Drop>()
+    private var palette: Array<IntArray>? = null
 
     private var lastUpdateNs: Long = 0L
     private var spawnAccumulator = 0.0
     private var hueSeed = Random.nextInt(0, 256)
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -68,10 +75,10 @@ class RainAnimation : LedAnimation {
                 continue
             }
 
-            val rgb = hsvToRgb(drop.hue, 255, 255)
+            val rgb = getColorFromHue(drop.hue, 255)
             addPixelColor(intX, intY, rgb)
             if (intY + 1 < combinedHeight) {
-                val tail = hsvToRgb(drop.hue, 180, 160)
+                val tail = getColorFromHue(drop.hue, 160)
                 addPixelColor(intX, intY + 1, tail)
             }
         }
@@ -121,6 +128,22 @@ class RainAnimation : LedAnimation {
         pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
         pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
         pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+    }
+
+    private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return intArrayOf(
+                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
+            )
+        } else {
+            return hsvToRgb(hue, 255, brightness)
+        }
     }
 
     private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {

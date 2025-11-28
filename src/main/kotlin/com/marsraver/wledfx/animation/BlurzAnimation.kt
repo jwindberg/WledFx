@@ -21,10 +21,17 @@ class BlurzAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
+    private var palette: Array<IntArray>? = null
 
     private var pixelBrightness: Array<ByteArray> = emptyArray()
     private var pixelHue: Array<ByteArray> = emptyArray()
     private var currentHue: Int = 0
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     private var fadeSpeed: Int = 20
     private var blurIntensity: Int = 10
@@ -131,30 +138,49 @@ class BlurzAnimation : LedAnimation {
         val brightness = pixelBrightness[x][y].toInt() and 0xFF
         val hue = pixelHue[x][y].toInt() and 0xFF
 
-        val h = hue / 255.0 * 360.0
-        val v = brightness / 255.0
-        val c = v
-        val xComponent = c * (1 - abs((h / 60.0 % 2) - 1))
-        val m = v - c
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            // Use palette
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            var rFinal = (baseColor[0] * brightnessFactor).toInt()
+            var gFinal = (baseColor[1] * brightnessFactor).toInt()
+            var bFinal = (baseColor[2] * brightnessFactor).toInt()
+            
+            // Apply the same brightness boost as original
+            rFinal = min(255, (rFinal * 3) / 2)
+            gFinal = min(255, (gFinal * 3) / 2)
+            bFinal = min(255, (bFinal * 3) / 2)
+            
+            return intArrayOf(rFinal.coerceIn(0, 255), gFinal.coerceIn(0, 255), bFinal.coerceIn(0, 255))
+        } else {
+            // Use HSV conversion (original behavior)
+            val h = hue / 255.0 * 360.0
+            val v = brightness / 255.0
+            val c = v
+            val xComponent = c * (1 - abs((h / 60.0 % 2) - 1))
+            val m = v - c
 
-        val (r, g, b) = when {
-            h < 60 -> Triple(c, xComponent, 0.0)
-            h < 120 -> Triple(xComponent, c, 0.0)
-            h < 180 -> Triple(0.0, c, xComponent)
-            h < 240 -> Triple(0.0, xComponent, c)
-            h < 300 -> Triple(xComponent, 0.0, c)
-            else -> Triple(c, 0.0, xComponent)
+            val (r, g, b) = when {
+                h < 60 -> Triple(c, xComponent, 0.0)
+                h < 120 -> Triple(xComponent, c, 0.0)
+                h < 180 -> Triple(0.0, c, xComponent)
+                h < 240 -> Triple(0.0, xComponent, c)
+                h < 300 -> Triple(xComponent, 0.0, c)
+                else -> Triple(c, 0.0, xComponent)
+            }
+
+            var rFinal = ((r + m) * 255).roundToInt()
+            var gFinal = ((g + m) * 255).roundToInt()
+            var bFinal = ((b + m) * 255).roundToInt()
+
+            rFinal = min(255, (rFinal * 3) / 2)
+            gFinal = min(255, (gFinal * 3) / 2)
+            bFinal = min(255, (bFinal * 3) / 2)
+
+            return intArrayOf(rFinal, gFinal, bFinal)
         }
-
-        var rFinal = ((r + m) * 255).roundToInt()
-        var gFinal = ((g + m) * 255).roundToInt()
-        var bFinal = ((b + m) * 255).roundToInt()
-
-        rFinal = min(255, (rFinal * 3) / 2)
-        gFinal = min(255, (gFinal * 3) / 2)
-        bFinal = min(255, (bFinal * 3) / 2)
-
-        return intArrayOf(rFinal, gFinal, bFinal)
     }
 
     override fun getName(): String = "Blurz"

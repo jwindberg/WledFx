@@ -14,6 +14,7 @@ class CrazyBeesAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var palette: Array<IntArray>? = null
     private lateinit var bees: Array<Bee>
     private var numBees: Int = 0
     private var lastUpdateTime: Long = 0
@@ -22,6 +23,12 @@ class CrazyBeesAnimation : LedAnimation {
     private var fadeAmount: Int = 32
     private var blurAmount: Int = 10
     private var speed: Int = 128
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -56,14 +63,14 @@ class CrazyBeesAnimation : LedAnimation {
         for (i in 0 until numBees) {
             val bee = bees[i]
 
-            val flowerColor = hsvToRgb(bee.hue, 255, 255)
+            val flowerColor = getColorFromHue(bee.hue, 255)
             addPixelColor(bee.aimX + 1, bee.aimY, flowerColor)
             addPixelColor(bee.aimX, bee.aimY + 1, flowerColor)
             addPixelColor(bee.aimX - 1, bee.aimY, flowerColor)
             addPixelColor(bee.aimX, bee.aimY - 1, flowerColor)
 
             if (bee.posX != bee.aimX || bee.posY != bee.aimY) {
-                val beeColor = hsvToRgb(bee.hue, 153, 255)
+                val beeColor = getColorFromHue(bee.hue, 200) // Slightly dimmer for bees
                 setPixelColor(bee.posX, bee.posY, beeColor)
 
                 val error2 = bee.error * 2
@@ -147,6 +154,22 @@ class CrazyBeesAnimation : LedAnimation {
             pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
             pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
             pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+        }
+    }
+
+    private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return intArrayOf(
+                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
+            )
+        } else {
+            return hsvToRgb(hue, 255, brightness)
         }
     }
 

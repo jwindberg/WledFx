@@ -13,6 +13,13 @@ class ColoredBurstsAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var time: Int = 0
+    private var palette: Array<IntArray>? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -53,14 +60,28 @@ class ColoredBurstsAnimation : LedAnimation {
             return intArrayOf(0, 0, 0)
         }
 
-        val hue = (rayIndex * rayWidth + time * 2) % 360
-        val saturation = 1.0
         val maxDist = hypot(combinedWidth.toDouble(), combinedHeight.toDouble())
         var value = (1.0 - (distance / maxDist) * 0.8).coerceAtLeast(0.0)
         val pulse = 0.5 + 0.5 * sin(time * 0.1)
         value *= pulse
 
-        return hsvToRgb(hue, saturation, value)
+        // Use palette if available, otherwise use HSV
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val hue = (rayIndex * rayWidth + time * 2) % 360
+            val paletteIndex = ((hue / 360.0) * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val factor = value.coerceIn(0.0, 1.0)
+            return intArrayOf(
+                (baseColor[0] * factor).toInt().coerceIn(0, 255),
+                (baseColor[1] * factor).toInt().coerceIn(0, 255),
+                (baseColor[2] * factor).toInt().coerceIn(0, 255)
+            )
+        } else {
+            val hue = (rayIndex * rayWidth + time * 2) % 360
+            val saturation = 1.0
+            return hsvToRgb(hue, saturation, value)
+        }
     }
 
     override fun getName(): String = "Colored Bursts"

@@ -18,11 +18,18 @@ class SwirlAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var palette: Array<IntArray>? = null
 
     private var speed: Int = 128
     private var intensity: Int = 64
     private var custom1: Int = 16
     private var fadeAmount: Int = 4
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     @Volatile
     private var volumeSmth: Float = 0.0f
@@ -204,12 +211,26 @@ class SwirlAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(colorIndexValue: Int, brightness: Int): IntArray {
-        var colorIndex = colorIndexValue % 256
-        if (colorIndex < 0) colorIndex += 256
-        val h = colorIndex / 255.0f * 360.0f
-        val s = 1.0f
-        val v = brightness / 255.0f
-        return hsvToRgb(h, s, v)
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            var colorIndex = colorIndexValue % 256
+            if (colorIndex < 0) colorIndex += 256
+            val paletteIndex = (colorIndex / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return intArrayOf(
+                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
+            )
+        } else {
+            var colorIndex = colorIndexValue % 256
+            if (colorIndex < 0) colorIndex += 256
+            val h = colorIndex / 255.0f * 360.0f
+            val s = 1.0f
+            val v = brightness / 255.0f
+            return hsvToRgb(h, s, v)
+        }
     }
 
     private fun hsvToRgb(h: Float, s: Float, v: Float): IntArray {

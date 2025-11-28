@@ -26,6 +26,13 @@ class RippleRainbowAnimation : LedAnimation {
     private val ripples = mutableListOf<Ripple>()
     private var lastSpawnTimeNs: Long = 0L
     private var lastHue: Int = Random.nextInt(256)
+    private var palette: Array<IntArray>? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -65,7 +72,7 @@ class RippleRainbowAnimation : LedAnimation {
                     if (diff <= ripple.thickness) {
                         val falloff = 1.0 - diff / ripple.thickness
                         val brightness = (falloff * 255).roundToInt().coerceIn(0, 255)
-                        val rgb = hsvToRgb(hue, 255, brightness)
+                        val rgb = getColorFromHue(hue, brightness)
                         addPixelColor(x, y, rgb)
                     }
                 }
@@ -118,6 +125,22 @@ class RippleRainbowAnimation : LedAnimation {
         pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
         pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
         pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+    }
+
+    private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return intArrayOf(
+                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
+            )
+        } else {
+            return hsvToRgb(hue, 255, brightness)
+        }
     }
 
     private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {

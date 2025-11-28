@@ -12,7 +12,14 @@ class FrizzlesAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<IntArray>>
+    private var palette: Array<IntArray>? = null
     private var lastUpdateNs: Long = 0L
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Array<IntArray>) {
+        this.palette = palette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -36,13 +43,14 @@ class FrizzlesAnimation : LedAnimation {
             val x = beatsin8(freqBase + i, BORDER, combinedWidth - 1 - BORDER, timeMs)
             val y = beatsin8(15 - i, BORDER, combinedHeight - 1 - BORDER, timeMs)
             val hue = beatsin8(freqBase, 0, 255, timeMs)
-            addPixelColor(x, y, hsvToRgb(hue, 255, 255))
+            val color = getColorFromHue(hue, 255)
+            addPixelColor(x, y, color)
 
             if (combinedWidth > 24 || combinedHeight > 24) {
-                addPixelColor(x + 1, y, hsvToRgb(hue, 255, 255))
-                addPixelColor(x - 1, y, hsvToRgb(hue, 255, 255))
-                addPixelColor(x, y + 1, hsvToRgb(hue, 255, 255))
-                addPixelColor(x, y - 1, hsvToRgb(hue, 255, 255))
+                addPixelColor(x + 1, y, color)
+                addPixelColor(x - 1, y, color)
+                addPixelColor(x, y + 1, color)
+                addPixelColor(x, y - 1, color)
             }
         }
 
@@ -124,6 +132,22 @@ class FrizzlesAnimation : LedAnimation {
         val mid = (low + high) / 2.0
         val amplitude = (high - low) / 2.0
         return (mid + sine * amplitude).roundToInt().coerceIn(low, high)
+    }
+
+    private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
+        val currentPalette = palette
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return intArrayOf(
+                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
+                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
+            )
+        } else {
+            return hsvToRgb(hue, 255, brightness)
+        }
     }
 
     private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
