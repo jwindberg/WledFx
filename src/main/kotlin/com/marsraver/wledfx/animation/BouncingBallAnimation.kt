@@ -15,16 +15,16 @@ class BouncingBallAnimation : LedAnimation {
     private var velocityX: Double = 0.0
     private var velocityY: Double = 0.0
     private var ballRadius: Int = 2
-    private var colorR: Int = 0
-    private var colorG: Int = 255
-    private var colorB: Int = 255
+    private var currentColor: IntArray = intArrayOf(0, 255, 255)
 
     override fun supportsColor(): Boolean = true
 
     override fun setColor(r: Int, g: Int, b: Int) {
-        colorR = r
-        colorG = g
-        colorB = b
+        currentColor = intArrayOf(r, g, b)
+    }
+
+    override fun getColor(): IntArray {
+        return currentColor.clone()
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -76,14 +76,14 @@ class BouncingBallAnimation : LedAnimation {
         val distance = sqrt(dx * dx + dy * dy)
 
         return when {
-            distance <= ballRadius -> intArrayOf(colorR, colorG, colorB)
+            distance <= ballRadius -> currentColor.clone()
             distance <= ballRadius + MAX_TRAIL -> {
                 val trailDistance = distance - ballRadius
                 val factor = (1.0 - trailDistance / MAX_TRAIL).coerceIn(0.0, 1.0)
                 intArrayOf(
-                    (colorR * factor).toInt().coerceIn(0, 255),
-                    (colorG * factor).toInt().coerceIn(0, 255),
-                    (colorB * factor).toInt().coerceIn(0, 255)
+                    (currentColor[0] * factor).toInt().coerceIn(0, 255),
+                    (currentColor[1] * factor).toInt().coerceIn(0, 255),
+                    (currentColor[2] * factor).toInt().coerceIn(0, 255)
                 )
             }
             else -> intArrayOf(0, 0, 0)

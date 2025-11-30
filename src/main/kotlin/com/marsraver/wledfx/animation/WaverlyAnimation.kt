@@ -41,7 +41,26 @@ class WaverlyAnimation : LedAnimation {
             scope.launch {
                 AudioPipeline.rmsFlow().collectLatest { level ->
                     synchronized(audioLock) {
-                        smoothedLevel = smoothedLevel * 0.82 + level.level * 0.18
+                        // Amplify incoming audio for better sensitivity to normal speech
+                        // Multiply by 3-4x to make normal room sounds detectable
+                        val amplified = level.level.toDouble() * 3.5
+                        val incoming = amplified.coerceIn(0.0, 255.0)
+                        
+                        // More responsive: faster attack, faster decay
+                        // When audio is present, respond quickly (30% new)
+                        // When audio stops, decay quickly (only 70% retention)
+                        if (incoming > smoothedLevel) {
+                            // Attack: respond quickly to rising audio
+                            smoothedLevel = smoothedLevel * 0.70 + incoming * 0.30
+                        } else {
+                            // Decay: fade out quickly when audio stops
+                            smoothedLevel = smoothedLevel * 0.85
+                        }
+                        // Apply threshold - very low levels become 0 for true black
+                        // Lower threshold so normal speech can trigger it
+                        if (smoothedLevel < 3.0) {
+                            smoothedLevel = 0.0
+                        }
                     }
                 }
             }
@@ -53,9 +72,22 @@ class WaverlyAnimation : LedAnimation {
         clearPixels()
 
         val level = synchronized(audioLock) { smoothedLevel }.coerceIn(0.0, 255.0)
-        val heightMultiplier = 0.35 + (level / 255.0) * 1.35
-        val brightnessBase = 110 + level * 0.55
-        val blurAmount = (32 + level / 4.0).roundToInt().coerceIn(0, 127)
+        
+        // When level is 0, should be completely black (no base values)
+        if (level <= 0.0) {
+            // Everything is already cleared, just return
+            return true
+        }
+        
+        // Scale everything from 0 when quiet to full when loud
+        val levelFactor = level / 255.0
+        // Increase height multiplier so music fills closer to 50% of screen
+        // With normal music levels, should reach ~50% height
+        val heightMultiplier = levelFactor * 3.5 // Increased from 1.7 to 3.5 for better fill
+        // Increase brightness - make it brighter, especially at lower levels
+        // Scale from 0 to 255, but boost lower levels for better visibility
+        val brightnessBase = (levelFactor * 255.0).coerceIn(0.0, 255.0)
+        val blurAmount = (levelFactor * 127.0).roundToInt().coerceIn(0, 127) // 0 to 127 (was 32 to 127)
 
         for (i in 0 until combinedWidth) {
             val noiseVal = inoise8(i * 45.0, timeValue, timeValue * 0.6)
@@ -65,7 +97,10 @@ class WaverlyAnimation : LedAnimation {
                 .coerceIn(0, combinedHeight)
             if (thisMax <= 0) continue
 
-            val brightness = brightnessBase.roundToInt().coerceIn(90, 255)
+            // Increase brightness - ensure it's bright enough to be visible
+            // Minimum brightness when audio is present, scale up with level
+            val minBrightness = 180 // Minimum brightness when audio detected
+            val brightness = (minBrightness + (brightnessBase - minBrightness) * 0.3).roundToInt().coerceIn(180, 255)
             for (j in 0 until thisMax) {
                 val paletteIndex = mapRange(j.toDouble(), 0.0, thisMax.toDouble(), 250.0, 0.0)
                 val color = colorFromRainbowPalette(paletteIndex, brightness)

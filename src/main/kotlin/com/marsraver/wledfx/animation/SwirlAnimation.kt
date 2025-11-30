@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +19,7 @@ class SwirlAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<IntArray>> = emptyArray()
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     private var speed: Int = 128
     private var intensity: Int = 64
@@ -27,8 +28,12 @@ class SwirlAnimation : LedAnimation {
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     @Volatile
@@ -211,7 +216,7 @@ class SwirlAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(colorIndexValue: Int, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             var colorIndex = colorIndexValue % 256
             if (colorIndex < 0) colorIndex += 256

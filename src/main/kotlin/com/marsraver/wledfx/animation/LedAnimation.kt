@@ -1,5 +1,6 @@
 package com.marsraver.wledfx.animation
 
+import com.marsraver.wledfx.palette.Palette
 import javafx.scene.canvas.GraphicsContext
 import javafx.scene.paint.Color
 
@@ -66,12 +67,43 @@ interface LedAnimation {
     }
 
     /**
+     * Get the current color of the animation (if supported).
+     *
+     * @return RGB color values as [R, G, B] each in range 0-255, or null if not supported
+     */
+    fun getColor(): IntArray? {
+        // Default implementation returns null
+        return null
+    }
+
+    /**
+     * Get the current palette of the animation (if supported).
+     *
+     * @return Palette object, or null if not supported
+     */
+    fun getPalette(): Palette? {
+        // Default implementation returns null
+        return null
+    }
+
+    /**
      * Set the color palette for the animation (if supported).
      *
-     * @param palette array of RGB colors, each as [R, G, B] with values 0-255
+     * @param palette Palette object containing the color array
      */
-    fun setPalette(palette: Array<IntArray>) {
+    fun setPalette(palette: Palette) {
         // Default implementation does nothing
+    }
+
+    /**
+     * Get the default palette name for this animation.
+     * If null, the global default palette will be used.
+     *
+     * @return the default palette name, or null to use the global default
+     */
+    fun getDefaultPaletteName(): String? {
+        // Default implementation returns null, meaning use global default
+        return null
     }
 
     /**

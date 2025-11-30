@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -26,12 +27,16 @@ class RippleRainbowAnimation : LedAnimation {
     private val ripples = mutableListOf<Ripple>()
     private var lastSpawnTimeNs: Long = 0L
     private var lastHue: Int = Random.nextInt(256)
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -128,7 +133,7 @@ class RippleRainbowAnimation : LedAnimation {
     }
 
     private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]

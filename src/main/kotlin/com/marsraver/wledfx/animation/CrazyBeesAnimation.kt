@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import java.util.Random
 import kotlin.math.abs
@@ -14,7 +15,7 @@ class CrazyBeesAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<IntArray>> = emptyArray()
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
     private lateinit var bees: Array<Bee>
     private var numBees: Int = 0
     private var lastUpdateTime: Long = 0
@@ -26,8 +27,12 @@ class CrazyBeesAnimation : LedAnimation {
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -158,7 +163,7 @@ class CrazyBeesAnimation : LedAnimation {
     }
 
     private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]

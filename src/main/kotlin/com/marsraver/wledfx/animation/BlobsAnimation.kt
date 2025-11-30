@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import java.util.Random
 import kotlin.math.abs
@@ -14,7 +15,7 @@ class BlobsAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<IntArray>> = emptyArray()
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     private var speed: Int = 128
     private var intensity: Int = 128
@@ -29,8 +30,12 @@ class BlobsAnimation : LedAnimation {
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -242,7 +247,7 @@ class BlobsAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(hue: Int, wrap: Boolean, @Suppress("UNUSED_PARAMETER") blend: Boolean, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val adjustedHue = if (wrap) hue else hue % 256
             val paletteIndex = ((adjustedHue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)

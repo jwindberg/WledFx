@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,7 @@ class WavingCellAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var timeValue: Double = 0.0
+    private var currentPalette: Palette? = null
 
     @Volatile
     private var smoothedLevel: Double = 0.0
@@ -67,7 +69,7 @@ class WavingCellAnimation : LedAnimation {
         val vertical = cos8(y * 10.0 * energy)
         var index = wave * energy + vertical * (0.7 + energy * 0.3) + t + heatBoost
         index = wrapToPaletteRange(index)
-        val color = colorFromHeatPalette(index)
+        val color = colorFromPalette(index)
         val brightnessScale = (0.6 + level / 255.0 * 0.8).coerceIn(0.6, 1.4)
         color[0] = (color[0] * brightnessScale).roundToInt().coerceIn(0, 255)
         color[1] = (color[1] * brightnessScale).roundToInt().coerceIn(0, 255)
@@ -76,6 +78,16 @@ class WavingCellAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Waving Cell"
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     fun cleanup() {
         audioScope?.cancel()
@@ -103,6 +115,18 @@ class WavingCellAnimation : LedAnimation {
         var result = value % 256.0
         if (result < 0) result += 256.0
         return result
+    }
+
+    private fun colorFromPalette(indexValue: Double): IntArray {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            // Use the selected palette
+            val index = (indexValue.coerceIn(0.0, 255.0) / 255.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            return currentPalette[index].clone()
+        } else {
+            // Fallback to heat palette if no palette is set
+            return colorFromHeatPalette(indexValue)
+        }
     }
 
     private fun colorFromHeatPalette(indexValue: Double): IntArray {

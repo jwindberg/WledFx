@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import java.util.Random
@@ -21,7 +22,7 @@ class BlurzAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     private var pixelBrightness: Array<ByteArray> = emptyArray()
     private var pixelHue: Array<ByteArray> = emptyArray()
@@ -29,8 +30,12 @@ class BlurzAnimation : LedAnimation {
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     private var fadeSpeed: Int = 20
@@ -138,7 +143,7 @@ class BlurzAnimation : LedAnimation {
         val brightness = pixelBrightness[x][y].toInt() and 0xFF
         val hue = pixelHue[x][y].toInt() and 0xFF
 
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             // Use palette
             val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)

@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -12,7 +13,7 @@ class BlackHoleAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<IntArray>> = emptyArray()
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     private var speed: Int = 128
     private var intensity: Int = 128
@@ -26,8 +27,12 @@ class BlackHoleAnimation : LedAnimation {
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -161,7 +166,7 @@ class BlackHoleAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(hue: Int, wrap: Boolean, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             // Use the actual palette - map hue index (0-255) to palette array
             val adjustedHue = if (wrap) hue else hue % 256

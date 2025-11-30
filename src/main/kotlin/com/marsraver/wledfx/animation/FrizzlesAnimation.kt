@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import kotlin.math.PI
 import kotlin.math.roundToInt
@@ -12,13 +13,17 @@ class FrizzlesAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<IntArray>>
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
     private var lastUpdateNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -135,7 +140,7 @@ class FrizzlesAnimation : LedAnimation {
     }
 
     private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]

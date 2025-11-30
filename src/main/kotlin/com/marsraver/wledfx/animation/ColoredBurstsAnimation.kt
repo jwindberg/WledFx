@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import kotlin.math.abs
 import kotlin.math.floor
@@ -13,12 +14,16 @@ class ColoredBurstsAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var time: Int = 0
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -66,7 +71,7 @@ class ColoredBurstsAnimation : LedAnimation {
         value *= pulse
 
         // Use palette if available, otherwise use HSV
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val hue = (rayIndex * rayWidth + time * 2) % 360
             val paletteIndex = ((hue / 360.0) * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)

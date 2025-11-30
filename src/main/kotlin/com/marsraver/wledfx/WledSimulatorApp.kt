@@ -3,13 +3,21 @@ package com.marsraver.wledfx
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.marsraver.wledfx.animation.AkemiAnimation
+import com.marsraver.wledfx.animation.AndroidAnimation
+import com.marsraver.wledfx.animation.AuroraAnimation
 import com.marsraver.wledfx.animation.BlackHoleAnimation
+import com.marsraver.wledfx.animation.BlendsAnimation
 import com.marsraver.wledfx.animation.BlobsAnimation
 import com.marsraver.wledfx.animation.BlurzAnimation
+import com.marsraver.wledfx.animation.BpmAnimation
 import com.marsraver.wledfx.animation.BouncingBallAnimation
+import com.marsraver.wledfx.animation.BreatheAnimation
+import com.marsraver.wledfx.animation.CandleAnimation
+import com.marsraver.wledfx.animation.ChunChunAnimation
 import com.marsraver.wledfx.animation.ColoredBurstsAnimation
 import com.marsraver.wledfx.animation.CrazyBeesAnimation
 import com.marsraver.wledfx.animation.DistortionWavesAnimation
+import com.marsraver.wledfx.animation.DjLightAnimation
 import com.marsraver.wledfx.animation.DnaAnimation
 import com.marsraver.wledfx.animation.DnaSpiralAnimation
 import com.marsraver.wledfx.animation.DriftAnimation
@@ -24,8 +32,13 @@ import com.marsraver.wledfx.animation.RippleRainbowAnimation
 import com.marsraver.wledfx.animation.RainAnimation
 import com.marsraver.wledfx.animation.SwirlAnimation
 import com.marsraver.wledfx.animation.TartanAnimation
+import com.marsraver.wledfx.animation.TetrixAnimation
+import com.marsraver.wledfx.animation.TwinkleFoxAnimation
+import com.marsraver.wledfx.animation.TwinkleUpAnimation
+import com.marsraver.wledfx.animation.WashingMachineAnimation
 import com.marsraver.wledfx.animation.WavingCellAnimation
 import com.marsraver.wledfx.animation.WaverlyAnimation
+import com.marsraver.wledfx.palette.Palettes
 import com.marsraver.wledfx.animation.SquareSwirlAnimation
 import com.marsraver.wledfx.animation.SoapAnimation
 import com.marsraver.wledfx.animation.SunRadiationAnimation
@@ -88,6 +101,8 @@ class WledSimulatorApp : Application() {
     private var animationTimer: AnimationTimer? = null
     private var currentAnimation: LedAnimation? = null
     private val running = AtomicBoolean(false)
+    private val animationColorStates = mutableMapOf<String, IntArray>()  // Store color state per animation
+    private val animationPaletteStates = mutableMapOf<String, String>()  // Store palette state per animation
     private lateinit var startButton: Button
     private lateinit var statusLabel: Label
     private lateinit var animationComboBox: ComboBox<String>
@@ -105,6 +120,8 @@ class WledSimulatorApp : Application() {
     private lateinit var colorLabel: Label
     private lateinit var paletteComboBox: ComboBox<String>
     private lateinit var paletteLabel: Label
+    private lateinit var candleMultiCheckBox: CheckBox
+    private lateinit var twinkleCheckBox: CheckBox
     private var lastRandomSwitchNs: Long = 0L
     private var debugStartNs: Long = 0L
     private var gridDebugLogged = false
@@ -125,15 +142,23 @@ class WledSimulatorApp : Application() {
         animationComboBox = ComboBox<String>().apply {
             val animationNames = listOf(
                 "Akemi",
+                "Android",
+                "Aurora",
                 "Black Hole",
+                "Blends",
                 "Blobs",
                 "Blurz",
+                "BPM",
                 "Bouncing Ball",
+                "Breathe",
+                "Candle",
+                "ChunChun",
                 "Colored Bursts",
                 "Crazy Bees",
                 "DNA",
                 "DNA Spiral",
                 "Distortion Waves",
+                "DJLight",
                 "Drift",
                 "Drift Rose",
                 "Frizzles",
@@ -148,9 +173,13 @@ class WledSimulatorApp : Application() {
                 "Sun Radiation",
                 "Swirl",
                 "Tartan",
+                "Tetrix",
+                "TwinkleFox",
+                "TwinkleUp",
+                "Washing Machine",
                 "Waverly",
                 "Waving Cell",
-            ).sorted()
+            ).sortedBy { it.lowercase() }
             items.addAll(animationNames)
             value = when {
                 animationNames.contains("Snake") -> "Snake"
@@ -253,7 +282,7 @@ class WledSimulatorApp : Application() {
         textSpeedSlider.isVisible = false
         textSpeedSlider.isManaged = false
 
-        // Color picker
+        // Color picker - default to black for TwinkleUp, white for others
         colorLabel = Label("Color:")
         colorPicker = ColorPicker(Color.WHITE).apply {
             isDisable = true
@@ -264,6 +293,9 @@ class WledSimulatorApp : Application() {
                     val g = (newColor.green * 255).toInt().coerceIn(0, 255)
                     val b = (newColor.blue * 255).toInt().coerceIn(0, 255)
                     animation.setColor(r, g, b)
+                    // Store the color state for this animation
+                    val animationName = animation.getName()
+                    animationColorStates[animationName] = intArrayOf(r, g, b)
                 }
             }
         }
@@ -272,16 +304,19 @@ class WledSimulatorApp : Application() {
         // Palette selector
         paletteLabel = Label("Palette:")
         paletteComboBox = ComboBox<String>().apply {
-            items.addAll(PALETTES.keys.sorted())
-            value = "Default"
+            items.addAll(Palettes.getNames())
+            value = Palettes.DEFAULT_PALETTE_NAME
             isDisable = true
             setOnAction {
                 val selectedPalette = value
                 val animation = currentAnimation
                 if (animation != null && animation.supportsPalette() && selectedPalette != null) {
-                    val palette = PALETTES[selectedPalette]
+                    val palette = Palettes.get(selectedPalette)
                     if (palette != null) {
                         animation.setPalette(palette)
+                        // Store the palette state for this animation
+                        val animationName = animation.getName()
+                        animationPaletteStates[animationName] = selectedPalette
                     }
                 }
             }
@@ -310,7 +345,31 @@ class WledSimulatorApp : Application() {
         val mainContent = VBox(10.0, controlsBox, canvas, colorPaletteBox)
         val root = BorderPane()
         root.center = mainContent
-        val brightnessBox = VBox(12.0, brightnessLabel, brightnessSlider, textInputLabel, textInputField, textSpeedLabel, textSpeedSlider).apply {
+        // Candle multi-mode checkbox
+        candleMultiCheckBox = CheckBox("Multi Candle").apply {
+            isVisible = false
+            isManaged = false
+            selectedProperty().addListener { _, _, isSelected ->
+                val animation = currentAnimation
+                if (animation is CandleAnimation) {
+                    animation.setMultiMode(isSelected)
+                }
+            }
+        }
+        
+        // Twinkle checkbox
+        twinkleCheckBox = CheckBox("Twinkle").apply {
+            isVisible = false
+            isManaged = false
+            selectedProperty().addListener { _, _, isSelected ->
+                val animation = currentAnimation
+                if (animation is TwinkleFoxAnimation) {
+                    animation.setCatMode(isSelected)
+                }
+            }
+        }
+        
+        val brightnessBox = VBox(12.0, brightnessLabel, brightnessSlider, textInputLabel, textInputField, textSpeedLabel, textSpeedSlider, candleMultiCheckBox, twinkleCheckBox).apply {
             padding = Insets(10.0)
         }
         root.right = brightnessBox
@@ -413,10 +472,24 @@ class WledSimulatorApp : Application() {
             "Bouncing Ball" -> BouncingBallAnimation()
             "Colored Bursts" -> ColoredBurstsAnimation()
             "Black Hole" -> BlackHoleAnimation()
+            "Blends" -> BlendsAnimation()
             "Blobs" -> BlobsAnimation()
             "Blurz" -> BlurzAnimation()
+            "BPM" -> BpmAnimation()
+            "Breathe" -> BreatheAnimation()
+            "Candle" -> {
+                val candle = CandleAnimation()
+                // Apply multi-mode setting if checkbox is already set
+                if (::candleMultiCheckBox.isInitialized) {
+                    candle.setMultiMode(candleMultiCheckBox.isSelected)
+                }
+                candle
+            }
+            "ChunChun" -> ChunChunAnimation()
+            "Colored Bursts" -> ColoredBurstsAnimation()
             "Crazy Bees" -> CrazyBeesAnimation()
             "Distortion Waves" -> DistortionWavesAnimation()
+            "DJLight" -> DjLightAnimation()
             "DNA" -> DnaAnimation()
             "DNA Spiral" -> DnaSpiralAnimation()
             "Drift" -> DriftAnimation()
@@ -425,8 +498,20 @@ class WledSimulatorApp : Application() {
             "GEQ" -> GeqAnimation()
             "Swirl" -> SwirlAnimation()
             "Akemi" -> AkemiAnimation()
+            "Android" -> AndroidAnimation()
+            "Aurora" -> AuroraAnimation()
             "Waving Cell" -> WavingCellAnimation()
             "Tartan" -> TartanAnimation()
+            "Tetrix" -> TetrixAnimation()
+            "TwinkleFox" -> {
+                val twinkle = TwinkleFoxAnimation()
+                // Apply twinkle setting if checkbox is already set
+                if (::twinkleCheckBox.isInitialized) {
+                    twinkle.setCatMode(twinkleCheckBox.isSelected)
+                }
+                twinkle
+            }
+            "TwinkleUp" -> TwinkleUpAnimation()
             "Sun Radiation" -> SunRadiationAnimation()
             "Square Swirl" -> SquareSwirlAnimation()
             "Soap" -> SoapAnimation()
@@ -437,6 +522,7 @@ class WledSimulatorApp : Application() {
             "SinDots" -> SinDotsAnimation()
             "Ripple Rainbow" -> RippleRainbowAnimation()
             "Rain" -> RainAnimation()
+            "Washing Machine" -> WashingMachineAnimation()
             "Waverly" -> WaverlyAnimation()
             else -> {
                 System.err.println("Unknown animation: $selectedAnimation")
@@ -460,17 +546,55 @@ class WledSimulatorApp : Application() {
         
         // Apply color and palette if animation supports them
         if (supportsColor) {
-            val currentColor = colorPicker.value
-            val r = (currentColor.red * 255).toInt().coerceIn(0, 255)
-            val g = (currentColor.green * 255).toInt().coerceIn(0, 255)
-            val b = (currentColor.blue * 255).toInt().coerceIn(0, 255)
-            animation.setColor(r, g, b)
+            // Check if we have a stored color state for this animation
+            val storedColor = animationColorStates[selectedAnimation]
+            val colorToUse = if (storedColor != null) {
+                // Use stored color state
+                storedColor
+            } else {
+                // First time - get the animation's current color (its default)
+                val animColor = animation.getColor()
+                if (animColor != null) {
+                    animColor
+                } else {
+                    // Fallback: use animation-specific default
+                    when (selectedAnimation) {
+                        "TwinkleUp" -> intArrayOf(0, 0, 0)  // Black default
+                        "Tetrix" -> intArrayOf(0, 0, 0)  // Black default
+                        else -> {
+                            val currentColor = colorPicker.value
+                            intArrayOf(
+                                (currentColor.red * 255).toInt().coerceIn(0, 255),
+                                (currentColor.green * 255).toInt().coerceIn(0, 255),
+                                (currentColor.blue * 255).toInt().coerceIn(0, 255)
+                            )
+                        }
+                    }
+                }
+            }
+            // Update color picker to show the animation's current color
+            colorPicker.value = Color.rgb(colorToUse[0], colorToUse[1], colorToUse[2])
+            animation.setColor(colorToUse[0], colorToUse[1], colorToUse[2])
+            // Store the color state
+            animationColorStates[selectedAnimation] = colorToUse
         }
         if (supportsPalette) {
-            val selectedPalette = paletteComboBox.value ?: "Default"
-            val palette = PALETTES[selectedPalette]
+            // Check if we have a stored palette state for this animation
+            val storedPaletteName = animationPaletteStates[selectedAnimation]
+            val paletteNameToUse = if (storedPaletteName != null) {
+                // Use stored palette state
+                storedPaletteName
+            } else {
+                // First time - check if animation has its own default, otherwise use global default
+                animation.getDefaultPaletteName() ?: Palettes.DEFAULT_PALETTE_NAME
+            }
+            // Update palette combo box to show the animation's current palette
+            paletteComboBox.value = paletteNameToUse
+            val palette = Palettes.get(paletteNameToUse)
             if (palette != null) {
                 animation.setPalette(palette)
+                // Store the palette state
+                animationPaletteStates[selectedAnimation] = paletteNameToUse
             }
         }
         
@@ -583,10 +707,12 @@ class WledSimulatorApp : Application() {
         when (val animation = currentAnimation) {
             is BlurzAnimation -> animation.cleanup()
             is GeqAnimation -> animation.cleanup()
+            is DjLightAnimation -> animation.cleanup()
             is SwirlAnimation -> animation.cleanup()
             is AkemiAnimation -> animation.cleanup()
             is WavingCellAnimation -> animation.cleanup()
             is TartanAnimation -> animation.cleanup()
+            is TetrixAnimation -> animation.cleanup()
             is WaverlyAnimation -> animation.cleanup()
             is SunRadiationAnimation -> animation.cleanup()
             is SquareSwirlAnimation -> animation.cleanup()
@@ -657,35 +783,100 @@ class WledSimulatorApp : Application() {
         textSpeedSlider.isVisible = isScrollingText
         textSpeedSlider.isManaged = isScrollingText
         
+        val isCandle = animationName == "Candle"
+        candleMultiCheckBox.isVisible = isCandle
+        candleMultiCheckBox.isManaged = isCandle
+        
+        val isTwinkleFox = animationName == "TwinkleFox"
+        twinkleCheckBox.isVisible = isTwinkleFox
+        twinkleCheckBox.isManaged = isTwinkleFox
+        
+        // Always update palette combo box to show the correct state for the selected animation
+        // This ensures the UI reflects the correct state even when switching animations
+        // We need to check if the animation supports palettes, but we can't know that without the instance
+        // So we'll update it based on stored state, and it will be properly set when the animation starts
+        val storedPaletteName = animationPaletteStates[animationName]
+        if (storedPaletteName != null) {
+            // Only update if we have a stored state for this animation
+            // This prevents showing wrong state when switching to an animation that doesn't support palettes
+            paletteComboBox.value = storedPaletteName
+        }
+        
         // Update color and palette controls based on current animation (if it exists)
         // If animation doesn't exist yet, controls will be updated when animation starts
         val animation = currentAnimation
-        if (animation != null) {
+        // Only update if the current animation matches the selected animation name
+        if (animation != null && animation.getName() == animationName) {
             val supportsColor = animation.supportsColor()
             val supportsPalette = animation.supportsPalette()
             
             colorPicker.isDisable = !supportsColor
             colorLabel.isDisable = !supportsColor
+            // Palette combo box is already updated above, just enable/disable it
             paletteComboBox.isDisable = !supportsPalette
             paletteLabel.isDisable = !supportsPalette
             
             // Apply current selections if animation supports them
             if (supportsColor) {
-                val currentColor = colorPicker.value
-                val r = (currentColor.red * 255).toInt().coerceIn(0, 255)
-                val g = (currentColor.green * 255).toInt().coerceIn(0, 255)
-                val b = (currentColor.blue * 255).toInt().coerceIn(0, 255)
-                animation.setColor(r, g, b)
+                // Check if we have a stored color state for this animation
+                val storedColor = animationColorStates[animationName]
+                val colorToUse = if (storedColor != null) {
+                    // Use stored color state
+                    storedColor
+                } else {
+                    // First time - get the animation's current color (its default)
+                    val animColor = animation.getColor()
+                    if (animColor != null) {
+                        animColor
+                    } else {
+                        // Fallback: use animation-specific default
+                        when (animationName) {
+                            "TwinkleUp" -> intArrayOf(0, 0, 0)  // Black default
+                            "Tetrix" -> intArrayOf(0, 0, 0)  // Black default
+                            else -> {
+                                val currentColor = colorPicker.value
+                                intArrayOf(
+                                    (currentColor.red * 255).toInt().coerceIn(0, 255),
+                                    (currentColor.green * 255).toInt().coerceIn(0, 255),
+                                    (currentColor.blue * 255).toInt().coerceIn(0, 255)
+                                )
+                            }
+                        }
+                    }
+                }
+                // Update color picker to show the animation's current color
+                colorPicker.value = Color.rgb(colorToUse[0], colorToUse[1], colorToUse[2])
+                animation.setColor(colorToUse[0], colorToUse[1], colorToUse[2])
+                // Store the color state
+                animationColorStates[animationName] = colorToUse
             }
             
             if (supportsPalette) {
-                val selectedPalette = paletteComboBox.value ?: "Default"
-                val palette = PALETTES[selectedPalette]
+                // Check if we have a stored palette state for this animation
+                val storedPaletteName = animationPaletteStates[animationName]
+                val paletteNameToUse = if (storedPaletteName != null) {
+                    // Use stored palette state
+                    storedPaletteName
+                } else {
+                    // First time - check if animation has its own default, otherwise use global default
+                    animation.getDefaultPaletteName() ?: Palettes.DEFAULT_PALETTE_NAME
+                }
+                // Update palette combo box to show the animation's current palette
+                paletteComboBox.value = paletteNameToUse
+                val palette = Palettes.get(paletteNameToUse)
                 if (palette != null) {
                     animation.setPalette(palette)
+                    // Store the palette state
+                    animationPaletteStates[animationName] = paletteNameToUse
                 }
+            } else {
+                // Animation doesn't support palette - disable the combo box
+                paletteComboBox.isDisable = true
+                paletteLabel.isDisable = true
             }
         }
+        // Note: If animation doesn't exist yet or doesn't match, the state will be restored
+        // when the animation is created in startSelectedAnimation()
     }
 
     private fun updateRandomControls(enabled: Boolean) {
@@ -746,114 +937,6 @@ class WledSimulatorApp : Application() {
         private const val FALLBACK_GRID_HEIGHT = 32
 
         private val mapper = jacksonObjectMapper()
-        
-        // WLED-style color palettes
-        private val PALETTES = mapOf(
-            "Default" to arrayOf(
-                intArrayOf(255, 0, 0),   // Red
-                intArrayOf(255, 127, 0), // Orange
-                intArrayOf(255, 255, 0), // Yellow
-                intArrayOf(0, 255, 0),   // Green
-                intArrayOf(0, 255, 255), // Cyan
-                intArrayOf(0, 0, 255),   // Blue
-                intArrayOf(127, 0, 255), // Purple
-                intArrayOf(255, 0, 255)  // Magenta
-            ),
-            "Rainbow" to arrayOf(
-                intArrayOf(255, 0, 0),   // Red
-                intArrayOf(255, 127, 0), // Orange
-                intArrayOf(255, 255, 0), // Yellow
-                intArrayOf(127, 255, 0), // Yellow-Green
-                intArrayOf(0, 255, 0),   // Green
-                intArrayOf(0, 255, 127), // Green-Cyan
-                intArrayOf(0, 255, 255), // Cyan
-                intArrayOf(0, 127, 255), // Cyan-Blue
-                intArrayOf(0, 0, 255),   // Blue
-                intArrayOf(127, 0, 255), // Blue-Purple
-                intArrayOf(255, 0, 255), // Magenta
-                intArrayOf(255, 0, 127)  // Magenta-Red
-            ),
-            "Party" to arrayOf(
-                intArrayOf(255, 0, 0),   // Red
-                intArrayOf(255, 0, 255), // Magenta
-                intArrayOf(0, 0, 255),   // Blue
-                intArrayOf(0, 255, 255), // Cyan
-                intArrayOf(0, 255, 0),   // Green
-                intArrayOf(255, 255, 0), // Yellow
-                intArrayOf(255, 127, 0), // Orange
-                intArrayOf(255, 0, 0)    // Red
-            ),
-            "Ocean" to arrayOf(
-                intArrayOf(0, 0, 128),   // Dark Blue
-                intArrayOf(0, 0, 255),   // Blue
-                intArrayOf(0, 127, 255), // Light Blue
-                intArrayOf(0, 255, 255), // Cyan
-                intArrayOf(64, 224, 208), // Turquoise
-                intArrayOf(0, 255, 255), // Cyan
-                intArrayOf(0, 127, 255), // Light Blue
-                intArrayOf(0, 0, 255)    // Blue
-            ),
-            "Forest" to arrayOf(
-                intArrayOf(0, 64, 0),    // Dark Green
-                intArrayOf(0, 128, 0),  // Green
-                intArrayOf(0, 255, 0),   // Bright Green
-                intArrayOf(127, 255, 0), // Yellow-Green
-                intArrayOf(255, 255, 0), // Yellow
-                intArrayOf(127, 255, 0), // Yellow-Green
-                intArrayOf(0, 255, 0),   // Bright Green
-                intArrayOf(0, 128, 0)   // Green
-            ),
-            "Lava" to arrayOf(
-                intArrayOf(0, 0, 0),    // Black
-                intArrayOf(64, 0, 0),   // Dark Red
-                intArrayOf(128, 0, 0),  // Red
-                intArrayOf(255, 0, 0),  // Bright Red
-                intArrayOf(255, 64, 0), // Orange-Red
-                intArrayOf(255, 127, 0), // Orange
-                intArrayOf(255, 64, 0), // Orange-Red
-                intArrayOf(255, 0, 0)   // Bright Red
-            ),
-            "Cloud" to arrayOf(
-                intArrayOf(64, 64, 64),  // Dark Gray
-                intArrayOf(128, 128, 128), // Gray
-                intArrayOf(192, 192, 192), // Light Gray
-                intArrayOf(255, 255, 255), // White
-                intArrayOf(192, 192, 192), // Light Gray
-                intArrayOf(128, 128, 128), // Gray
-                intArrayOf(64, 64, 64),  // Dark Gray
-                intArrayOf(32, 32, 32)   // Very Dark Gray
-            ),
-            "Sunset" to arrayOf(
-                intArrayOf(0, 0, 0),    // Black
-                intArrayOf(64, 0, 64),  // Dark Purple
-                intArrayOf(128, 0, 128), // Purple
-                intArrayOf(255, 0, 255), // Magenta
-                intArrayOf(255, 64, 0), // Orange-Red
-                intArrayOf(255, 127, 0), // Orange
-                intArrayOf(255, 191, 0), // Yellow-Orange
-                intArrayOf(255, 255, 0)  // Yellow
-            ),
-            "Heat" to arrayOf(
-                intArrayOf(0, 0, 0),    // Black
-                intArrayOf(64, 0, 0),   // Dark Red
-                intArrayOf(128, 0, 0),  // Red
-                intArrayOf(255, 0, 0),  // Bright Red
-                intArrayOf(255, 64, 0), // Orange-Red
-                intArrayOf(255, 127, 0), // Orange
-                intArrayOf(255, 191, 0), // Yellow-Orange
-                intArrayOf(255, 255, 255) // White
-            ),
-            "Ice" to arrayOf(
-                intArrayOf(0, 0, 0),    // Black
-                intArrayOf(0, 0, 64),   // Dark Blue
-                intArrayOf(0, 0, 128),  // Blue
-                intArrayOf(0, 0, 255),  // Bright Blue
-                intArrayOf(0, 64, 255), // Light Blue
-                intArrayOf(0, 127, 255), // Cyan-Blue
-                intArrayOf(0, 255, 255), // Cyan
-                intArrayOf(255, 255, 255) // White
-            )
-        )
 
         private data class LayoutLoadResult(val layout: LayoutConfig, val source: String)
 

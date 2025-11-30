@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.palette.Palette
 
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -20,7 +21,7 @@ class RainAnimation : LedAnimation {
     private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<IntArray>>
     private val drops = mutableListOf<Drop>()
-    private var palette: Array<IntArray>? = null
+    private var currentPalette: Palette? = null
 
     private var lastUpdateNs: Long = 0L
     private var spawnAccumulator = 0.0
@@ -28,8 +29,12 @@ class RainAnimation : LedAnimation {
 
     override fun supportsPalette(): Boolean = true
 
-    override fun setPalette(palette: Array<IntArray>) {
-        this.palette = palette
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -131,7 +136,7 @@ class RainAnimation : LedAnimation {
     }
 
     private fun getColorFromHue(hue: Int, brightness: Int): IntArray {
-        val currentPalette = palette
+        val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]
