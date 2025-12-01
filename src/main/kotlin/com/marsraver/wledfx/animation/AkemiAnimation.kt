@@ -1,4 +1,6 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +20,7 @@ class AkemiAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
 
     private val fftResult = IntArray(16)
     private val spectrumLock = Any()
@@ -30,7 +32,7 @@ class AkemiAnimation : LedAnimation {
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         audioScope?.cancel()
         audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
             scope.launch {
@@ -57,19 +59,19 @@ class AkemiAnimation : LedAnimation {
         val lightFactor = 0.15f
         val normalFactor = 0.4f
 
-        val soundColor = intArrayOf(255, 165, 0)
-        val armsAndLegsDefault = intArrayOf(0xFF, 0xE0, 0xA0)
-        val eyeColor = intArrayOf(255, 255, 255)
+        val soundColor = RgbColor(255, 165, 0)
+        val armsAndLegsDefault = RgbColor(0xFF, 0xE0, 0xA0)
+        val eyeColor = RgbColor.WHITE
 
         val faceColor = colorWheel(counter and 0xFF)
-        val armsAndLegsColor = armsAndLegsDefault.clone()
+        val armsAndLegsColor = armsAndLegsDefault
 
         val base = spectrumSnapshot.getOrElse(0) { 0 } / 255.0f
         val isDancing = intensity > 128 && spectrumSnapshot.getOrElse(0) { 0 } > 128
 
         if (isDancing) {
             for (x in 0 until combinedWidth) {
-                setPixelColor(x, 0, intArrayOf(0, 0, 0))
+                setPixelColor(x, 0, RgbColor.BLACK)
             }
         }
 
@@ -82,22 +84,22 @@ class AkemiAnimation : LedAnimation {
                 val color = when (ak) {
                     3 -> multiplyColor(armsAndLegsColor, lightFactor)
                     2 -> multiplyColor(armsAndLegsColor, normalFactor)
-                    1 -> armsAndLegsColor.clone()
+                    1 -> armsAndLegsColor
                     6 -> multiplyColor(faceColor, lightFactor)
                     5 -> multiplyColor(faceColor, normalFactor)
-                    4 -> faceColor.clone()
-                    7 -> eyeColor.clone()
+                    4 -> faceColor
+                    7 -> eyeColor
                     8 -> if (base > 0.4f) {
                         val boost = clamp01(base)
-                        intArrayOf(
-                            min(255, (soundColor[0] * boost).roundToInt()),
-                            min(255, (soundColor[1] * boost).roundToInt()),
-                            min(255, (soundColor[2] * boost).roundToInt())
+                        RgbColor(
+                            min(255, (soundColor.r * boost).roundToInt()),
+                            min(255, (soundColor.g * boost).roundToInt()),
+                            min(255, (soundColor.b * boost).roundToInt())
                         )
                     } else {
-                        armsAndLegsColor.clone()
+                        armsAndLegsColor
                     }
-                    else -> intArrayOf(0, 0, 0)
+                    else -> RgbColor.BLACK
                 }
 
                 if (isDancing) {
@@ -135,17 +137,17 @@ class AkemiAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y].clone()
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Akemi"
 
-    fun cleanup() {
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(spectrumLock) {
@@ -162,60 +164,37 @@ class AkemiAnimation : LedAnimation {
 
     private fun clamp01(value: Float): Float = value.coerceIn(0f, 1f)
 
-    private fun hsvToRgb(h: Float, s: Float, v: Float): IntArray {
-        var hue = h % 360f
-        if (hue < 0) hue += 360f
-        val hi = ((hue / 60f) % 6).toInt()
-        val f = hue / 60f - hi
-        val p = v * (1 - s)
-        val q = v * (1 - f * s)
-        val t = v * (1 - (1 - f) * s)
-
-        val (r, g, b) = when (hi) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
+    private fun hsvToRgb(h: Float, s: Float, v: Float): RgbColor {
+        return ColorUtils.hsvToRgb(h, s, v)
     }
 
-    private fun colorWheel(posValue: Int): IntArray {
+    private fun colorWheel(posValue: Int): RgbColor {
         var pos = ((posValue % 256) + 256) % 256
         return when {
-            pos < 85 -> intArrayOf(pos * 3, 255 - pos * 3, 0)
+            pos < 85 -> RgbColor(pos * 3, 255 - pos * 3, 0)
             pos < 170 -> {
                 pos -= 85
-                intArrayOf(255 - pos * 3, 0, pos * 3)
+                RgbColor(255 - pos * 3, 0, pos * 3)
             }
             else -> {
                 pos -= 170
-                intArrayOf(0, pos * 3, 255 - pos * 3)
+                RgbColor(0, pos * 3, 255 - pos * 3)
             }
         }
     }
 
-    private fun multiplyColor(rgb: IntArray, factor: Float): IntArray {
+    private fun multiplyColor(rgb: RgbColor, factor: Float): RgbColor {
         val clampedFactor = clamp01(factor)
-        return intArrayOf(
-            min(255, (rgb[0] * clampedFactor).roundToInt()),
-            min(255, (rgb[1] * clampedFactor).roundToInt()),
-            min(255, (rgb[2] * clampedFactor).roundToInt())
+        return RgbColor(
+            min(255, (rgb.r * clampedFactor).roundToInt()),
+            min(255, (rgb.g * clampedFactor).roundToInt()),
+            min(255, (rgb.b * clampedFactor).roundToInt())
         )
     }
 
-    private fun setPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun setPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y][0] = rgb[0].coerceIn(0, 255)
-            pixelColors[x][y][1] = rgb[1].coerceIn(0, 255)
-            pixelColors[x][y][2] = rgb[2].coerceIn(0, 255)
+            pixelColors[x][y] = rgb
         }
     }
 

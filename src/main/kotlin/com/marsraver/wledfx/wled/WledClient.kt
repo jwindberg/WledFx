@@ -6,6 +6,7 @@ import com.marsraver.wledfx.wled.model.WledConfig
 import com.marsraver.wledfx.wled.model.WledInfo
 import com.marsraver.wledfx.wled.model.WledState
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 
 /**
@@ -15,10 +16,10 @@ class WledClient(private val ipAddress: String) {
 
     @Throws(Exception::class)
     fun getInfo(): WledInfo {
-        val url = URL("http://$ipAddress/json/info")
+        val url = URI("http://$ipAddress/json/info").toURL()
         val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 400
-        conn.readTimeout = 800
+        conn.connectTimeout = 2000  // Increased from 400ms to 2 seconds
+        conn.readTimeout = 3000     // Increased from 800ms to 3 seconds
         conn.requestMethod = "GET"
 
         if (conn.responseCode != HttpURLConnection.HTTP_OK) {
@@ -35,10 +36,10 @@ class WledClient(private val ipAddress: String) {
 
     @Throws(Exception::class)
     fun getConfig(): WledConfig {
-        val url = URL("http://$ipAddress/json/cfg")
+        val url = URI("http://$ipAddress/json/cfg").toURL()
         val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 400
-        conn.readTimeout = 800
+        conn.connectTimeout = 2000  // Increased from 400ms to 2 seconds
+        conn.readTimeout = 3000     // Increased from 800ms to 3 seconds
         conn.requestMethod = "GET"
 
         if (conn.responseCode != HttpURLConnection.HTTP_OK) {
@@ -55,10 +56,10 @@ class WledClient(private val ipAddress: String) {
 
     @Throws(Exception::class)
     fun getConfigJson(): JsonNode {
-        val url = URL("http://$ipAddress/json/cfg")
+        val url = URI("http://$ipAddress/json/cfg").toURL()
         val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 400
-        conn.readTimeout = 800
+        conn.connectTimeout = 2000  // Increased from 400ms to 2 seconds
+        conn.readTimeout = 3000     // Increased from 800ms to 3 seconds
         conn.requestMethod = "GET"
 
         if (conn.responseCode != HttpURLConnection.HTTP_OK) {
@@ -75,10 +76,10 @@ class WledClient(private val ipAddress: String) {
 
     @Throws(Exception::class)
     fun getState(): WledState {
-        val url = URL("http://$ipAddress/json/state")
+        val url = URI("http://$ipAddress/json/state").toURL()
         val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 400
-        conn.readTimeout = 800
+        conn.connectTimeout = 2000  // Increased from 400ms to 2 seconds
+        conn.readTimeout = 3000     // Increased from 800ms to 3 seconds
         conn.requestMethod = "GET"
 
         if (conn.responseCode != HttpURLConnection.HTTP_OK) {

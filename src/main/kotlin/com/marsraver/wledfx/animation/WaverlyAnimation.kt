@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -20,18 +23,29 @@ class WaverlyAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
     private var timeValue: Double = 0.0
+    private var currentPalette: Palette? = null
 
     @Volatile
     private var smoothedLevel: Double = 0.0
     private val audioLock = Any()
     private var audioScope: CoroutineScope? = null
 
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
+
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         timeValue = 0.0
         synchronized(audioLock) {
             smoothedLevel = 0.0
@@ -116,21 +130,17 @@ class WaverlyAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixelColors[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Waverly"
 
-    fun cleanup() {
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(audioLock) {
@@ -141,90 +151,82 @@ class WaverlyAnimation : LedAnimation {
     private fun clearPixels() {
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = 0
-                pixelColors[x][y][1] = 0
-                pixelColors[x][y][2] = 0
+                pixelColors[x][y] = RgbColor.BLACK
             }
         }
     }
 
-    private fun addPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) return
-        pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
-        pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
-        pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+        val current = pixelColors[x][y]
+        pixelColors[x][y] = RgbColor(
+            (current.r + rgb.r).coerceAtMost(255),
+            (current.g + rgb.g).coerceAtMost(255),
+            (current.b + rgb.b).coerceAtMost(255)
+        )
     }
 
     private fun blur2d(amount: Int) {
         if (amount <= 0) return
         val factor = amount.coerceIn(0, 255)
-        val temp = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
 
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (channel in 0 until 3) {
-                    var sum = 0
-                    var weight = 0
-                    for (dx in -1..1) {
-                        for (dy in -1..1) {
-                            val nx = x + dx
-                            val ny = y + dy
-                            if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
-                                val w = if (dx == 0 && dy == 0) 4 else 1
-                                sum += pixelColors[nx][ny][channel] * w
-                                weight += w
-                            }
+                var sumR = 0
+                var sumG = 0
+                var sumB = 0
+                var weight = 0
+                for (dx in -1..1) {
+                    for (dy in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                            val w = if (dx == 0 && dy == 0) 4 else 1
+                            val color = pixelColors[nx][ny]
+                            sumR += color.r * w
+                            sumG += color.g * w
+                            sumB += color.b * w
+                            weight += w
                         }
                     }
-                    val average = if (weight == 0) pixelColors[x][y][channel] else sum / weight
-                    temp[x][y][channel] =
-                        (pixelColors[x][y][channel] * (255 - factor) + average * factor) / 255
                 }
+                val current = pixelColors[x][y]
+                val averageR = if (weight == 0) current.r else sumR / weight
+                val averageG = if (weight == 0) current.g else sumG / weight
+                val averageB = if (weight == 0) current.b else sumB / weight
+                temp[x][y] = RgbColor(
+                    (current.r * (255 - factor) + averageR * factor) / 255,
+                    (current.g * (255 - factor) + averageG * factor) / 255,
+                    (current.b * (255 - factor) + averageB * factor) / 255
+                )
             }
         }
 
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = temp[x][y][0]
-                pixelColors[x][y][1] = temp[x][y][1]
-                pixelColors[x][y][2] = temp[x][y][2]
+                pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
-    private fun colorFromRainbowPalette(indexValue: Double, brightness: Int): IntArray {
-        var index = indexValue % 256.0
-        if (index < 0) index += 256.0
-        val hue = index / 255.0 * 360.0
-        val saturation = 1.0
-        val value = brightness / 255.0
-        return hsvToRgb(hue, saturation, value)
-    }
-
-    private fun hsvToRgb(h: Double, s: Double, v: Double): IntArray {
-        if (s <= 0.0) {
-            val value = (v * 255).roundToInt().coerceIn(0, 255)
-            return intArrayOf(value, value, value)
+    private fun colorFromRainbowPalette(indexValue: Double, brightness: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            var index = indexValue % 256.0
+            if (index < 0) index += 256.0
+            val paletteIndex = (index / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            var index = indexValue % 256.0
+            if (index < 0) index += 256.0
+            val hue = (index / 255.0 * 360.0).toInt()
+            val saturation = 255
+            val value = brightness
+            return ColorUtils.hsvToRgb(hue, saturation, value)
         }
-
-        val hMod = (h % 360 + 360) % 360
-        val c = v * s
-        val x = c * (1 - abs((hMod / 60.0) % 2 - 1))
-        val m = v - c
-
-        val (r1, g1, b1) = when {
-            hMod < 60 -> Triple(c, x, 0.0)
-            hMod < 120 -> Triple(x, c, 0.0)
-            hMod < 180 -> Triple(0.0, c, x)
-            hMod < 240 -> Triple(0.0, x, c)
-            hMod < 300 -> Triple(x, 0.0, c)
-            else -> Triple(c, 0.0, x)
-        }
-
-        val r = ((r1 + m) * 255).roundToInt().coerceIn(0, 255)
-        val g = ((g1 + m) * 255).roundToInt().coerceIn(0, 255)
-        val b = ((b1 + m) * 255).roundToInt().coerceIn(0, 255)
-        return intArrayOf(r, g, b)
     }
 
     private fun mapRange(value: Double, inMin: Double, inMax: Double, outMin: Double, outMax: Double): Double {

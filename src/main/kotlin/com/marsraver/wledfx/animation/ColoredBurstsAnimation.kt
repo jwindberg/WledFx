@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.abs
 import kotlin.math.floor
@@ -37,7 +39,7 @@ class ColoredBurstsAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val t = time * 0.05
         val centerX = combinedWidth / 2.0 + kotlin.math.cos(t * 0.5) * combinedWidth * 0.3
         val centerY = combinedHeight / 2.0 + kotlin.math.sin(t * 0.3) * combinedHeight * 0.3
@@ -48,7 +50,7 @@ class ColoredBurstsAnimation : LedAnimation {
 
         if (distance < 1) {
             val intensity = 128 + (time % 128)
-            return intArrayOf(intensity, intensity, intensity)
+            return RgbColor(intensity, intensity, intensity)
         }
 
         var angle = Math.toDegrees(kotlin.math.atan2(dy, dx))
@@ -62,7 +64,7 @@ class ColoredBurstsAnimation : LedAnimation {
         val rayCenterOffset = abs(rayOffset - 0.5)
 
         if (rayCenterOffset > 0.3) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
 
         val maxDist = hypot(combinedWidth.toDouble(), combinedHeight.toDouble())
@@ -77,11 +79,7 @@ class ColoredBurstsAnimation : LedAnimation {
             val paletteIndex = ((hue / 360.0) * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]
             val factor = value.coerceIn(0.0, 1.0)
-            return intArrayOf(
-                (baseColor[0] * factor).toInt().coerceIn(0, 255),
-                (baseColor[1] * factor).toInt().coerceIn(0, 255),
-                (baseColor[2] * factor).toInt().coerceIn(0, 255)
-            )
+            return ColorUtils.scaleBrightness(baseColor, factor)
         } else {
             val hue = (rayIndex * rayWidth + time * 2) % 360
             val saturation = 1.0
@@ -91,31 +89,8 @@ class ColoredBurstsAnimation : LedAnimation {
 
     override fun getName(): String = "Colored Bursts"
 
-    private fun hsvToRgb(h: Double, s: Double, v: Double): IntArray {
-        if (s <= 0.0) {
-            val value = (v * 255).toInt().coerceIn(0, 255)
-            return intArrayOf(value, value, value)
-        }
-
-        val c = (v * s * 255).toInt()
-        val hPrime = h / 60.0
-        val x = (c * (1 - abs(hPrime % 2 - 1))).toInt()
-        val m = (v * 255 - c).toInt()
-
-        val (r1, g1, b1) = when {
-            hPrime < 1 -> Triple(c, x, 0)
-            hPrime < 2 -> Triple(x, c, 0)
-            hPrime < 3 -> Triple(0, c, x)
-            hPrime < 4 -> Triple(0, x, c)
-            hPrime < 5 -> Triple(x, 0, c)
-            else -> Triple(c, 0, x)
-        }
-
-        return intArrayOf(
-            (r1 + m).coerceIn(0, 255),
-            (g1 + m).coerceIn(0, 255),
-            (b1 + m).coerceIn(0, 255)
-        )
+    private fun hsvToRgb(h: Double, s: Double, v: Double): RgbColor {
+        return ColorUtils.hsvToRgb(h.toFloat(), s.toFloat(), v.toFloat())
     }
 }
 

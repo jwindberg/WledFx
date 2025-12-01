@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.*
 import kotlin.random.Random
@@ -21,7 +23,7 @@ class AuroraAnimation : LedAnimation {
         var baseAlpha: Double,         // Base alpha (0.0-1.0)
         var speedFactor: Double,       // Speed multiplier
         var goingLeft: Boolean,        // Direction
-        var baseColor: IntArray,       // Base RGB color
+        var baseColor: RgbColor,       // Base RGB color
         var alive: Boolean = true
     ) {
         fun updateCachedValues(): Pair<Int, Int> {
@@ -39,7 +41,7 @@ class AuroraAnimation : LedAnimation {
             return Pair(waveStart, waveEnd)
         }
         
-        fun getColorForLED(ledIndex: Int, ageFactor: Double): IntArray? {
+        fun getColorForLED(ledIndex: Int, ageFactor: Double): RgbColor? {
             val halfTtl = ttl / 2.0
             val ageFactorCached = if (age < halfTtl) {
                 age / halfTtl
@@ -59,11 +61,7 @@ class AuroraAnimation : LedAnimation {
             
             val brightnessFactor = (1.0 - offsetFactor) * ageFactorCached * baseAlpha
             
-            return intArrayOf(
-                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
-                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
-                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
-            )
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
         }
         
         fun update(segmentLength: Int, speed: Double) {
@@ -185,7 +183,7 @@ class AuroraAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         // Aurora waves move horizontally, so we use x coordinate
         val ledIndex = x
         
@@ -205,49 +203,19 @@ class AuroraAnimation : LedAnimation {
             
             val color = wave.getColorForLED(ledIndex, ageFactor)
             if (color != null) {
-                mixedR = (mixedR + color[0]).coerceAtMost(255)
-                mixedG = (mixedG + color[1]).coerceAtMost(255)
-                mixedB = (mixedB + color[2]).coerceAtMost(255)
+                mixedR = (mixedR + color.r).coerceAtMost(255)
+                mixedG = (mixedG + color.g).coerceAtMost(255)
+                mixedB = (mixedB + color.b).coerceAtMost(255)
             }
         }
         
-        return intArrayOf(mixedR, mixedG, mixedB)
+        return RgbColor(mixedR, mixedG, mixedB)
     }
 
     override fun getName(): String = "Aurora"
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
-        }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        return ColorUtils.hsvToRgb(hue, saturation, value)
     }
 }
 

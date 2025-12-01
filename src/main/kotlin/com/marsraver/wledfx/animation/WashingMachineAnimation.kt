@@ -1,5 +1,6 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.PI
 import kotlin.math.sin
@@ -14,7 +15,7 @@ class WashingMachineAnimation : LedAnimation {
     private var combinedHeight: Int = 0
     private var currentPalette: Palette? = null
     private var intensity: Int = 128  // Controls wave frequency
-    private var speed: Int = 128      // Speed control (0-255)
+    private var speed: Int = 28      // Speed control (0-255)
     
     private var step: Long = 0L
     private var startTimeNs: Long = 0L
@@ -47,17 +48,20 @@ class WashingMachineAnimation : LedAnimation {
         val timeMs = (now - startTimeNs) / 1_000_000L
         val tristateSpeed = tristateSquare8(timeMs shr 7, 90, 15)
         
-        // Accumulate step: step += (speed * 2048) / (512 - SEGMENT.speed)
-        val speedFactor = (512 - speed).coerceAtLeast(1)
-        step += (tristateSpeed * 2048L) / speedFactor
+        // Speed factor: lower speed values = slower animation (inverted relationship)
+        // speed=2 → factor=254 (slow), speed=128 → factor=128 (medium), speed=255 → factor=1 (fast)
+        val speedFactor = (256 - speed).coerceAtLeast(1)
+        // Reduced multiplier from 2048L to 128L to make the overall animation much slower
+        // This gives a more reasonable speed range where even speed=2 is manageable
+        step += (tristateSpeed * 128L) / speedFactor
 
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette == null || currentPalette.isEmpty()) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
 
         val segmentLength = combinedWidth * combinedHeight
@@ -74,6 +78,16 @@ class WashingMachineAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Washing Machine"
+
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
 
     /**
      * tristate_square8 - Creates a three-state square wave
@@ -99,14 +113,7 @@ class WashingMachineAnimation : LedAnimation {
      * Equivalent to FastLED's sin8 function
      */
     private fun sin8(angle: Int): Int {
-        // Normalize angle to 0-255 range
-        val normalized = (angle % 256 + 256) % 256
-        // Convert to radians (0-255 maps to 0-2π)
-        val radians = (normalized / 255.0) * 2 * PI
-        // Calculate sine (-1 to 1) and map to 0-255
-        val sine = sin(radians)
-        val result = ((sine + 1.0) / 2.0 * 255.0).toInt()
-        return result.coerceIn(0, 255)
+        return com.marsraver.wledfx.color.ColorUtils.sin8(angle)
     }
 }
 

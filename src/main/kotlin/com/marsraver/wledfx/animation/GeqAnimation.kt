@@ -1,4 +1,6 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -18,14 +20,14 @@ class GeqAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
 
     private var numBands: Int = 16
     private var centerBin: Int = 0
     private var speed: Int = 128
     private var intensity: Int = 128
     private var colorBars: Boolean = false
-    private val peakColor = intArrayOf(255, 255, 255)
+    private val peakColor = RgbColor.WHITE
     private var noiseFloor: Int = 50
     private var maxFFTValue: Int = 255
 
@@ -40,7 +42,7 @@ class GeqAnimation : LedAnimation {
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         previousBarHeight = IntArray(combinedWidth)
         lastRippleTime = 0
         callCount = 0
@@ -127,21 +129,27 @@ class GeqAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixelColors[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "GEQ"
 
-    fun cleanup() {
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
+
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(spectrumLock) {
@@ -158,53 +166,26 @@ class GeqAnimation : LedAnimation {
 
     private fun fadeToBlack(fadeAmount: Int) {
         val amount = fadeAmount.coerceIn(0, 255)
+        val factor = (255 - amount) / 255.0
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (c in 0 until 3) {
-                    val faded = pixelColors[x][y][c] * (255 - amount) / 255
-                    pixelColors[x][y][c] = faded.coerceIn(0, 255)
-                }
+                pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }
 
-    private fun colorFromPalette(colorIndexValue: Int, wrap: Boolean): IntArray {
+    private fun colorFromPalette(colorIndexValue: Int, wrap: Boolean): RgbColor {
         var colorIndex = colorIndexValue
         if (!wrap) colorIndex %= 256
         if (colorIndex < 0) colorIndex += 256
         colorIndex %= 256
         val h = colorIndex / 255.0f * 360.0f
-        return hsvToRgb(h, 1.0f, 1.0f)
+        return ColorUtils.hsvToRgb(h, 1.0f, 1.0f)
     }
 
-    private fun hsvToRgb(h: Float, s: Float, v: Float): IntArray {
-        val hi = ((h / 60f) % 6).toInt()
-        val f = h / 60f - hi
-        val p = v * (1 - s)
-        val q = v * (1 - f * s)
-        val t = v * (1 - (1 - f) * s)
-
-        val (r, g, b) = when (hi) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
-    }
-
-    private fun setPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun setPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y][0] = rgb[0].coerceIn(0, 255)
-            pixelColors[x][y][1] = rgb[1].coerceIn(0, 255)
-            pixelColors[x][y][2] = rgb[2].coerceIn(0, 255)
+            pixelColors[x][y] = rgb
         }
     }
 }

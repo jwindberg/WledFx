@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.max
 import kotlin.random.Random
@@ -62,7 +64,9 @@ class CandleAnimation : LedAnimation {
         }
     }
     
-    fun setMultiMode(multi: Boolean) {
+    override fun supportsMultiMode(): Boolean = true
+
+    override fun setMultiMode(multi: Boolean) {
         if (multiMode != multi) {
             multiMode = multi
             // Reinitialize if already initialized
@@ -189,7 +193,7 @@ class CandleAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val pixelIndex = y * combinedWidth + x
         
         // Get brightness for this pixel
@@ -218,12 +222,12 @@ class CandleAnimation : LedAnimation {
             
             // Blend with secondary color (black/off) using brightness
             // color_blend(SEGCOLOR(1), paletteColor, brightness)
-            val secondaryColor = intArrayOf(0, 0, 0) // SEGCOLOR(1) - secondary color (black)
+            val secondaryColor = RgbColor.BLACK // SEGCOLOR(1) - secondary color (black)
             return colorBlend(secondaryColor, paletteColor, brightness)
         } else {
             // Default: warm orange/yellow candle color
-            val candleColor = intArrayOf(255, 100, 0) // Warm orange
-            val secondaryColor = intArrayOf(0, 0, 0)
+            val candleColor = RgbColor(255, 100, 0) // Warm orange
+            val secondaryColor = RgbColor.BLACK
             return colorBlend(secondaryColor, candleColor, brightness)
         }
     }
@@ -234,15 +238,8 @@ class CandleAnimation : LedAnimation {
      * Color blend function matching FastLED's color_blend
      * Blends color1 and color2 based on blend amount (0-255)
      */
-    private fun colorBlend(color1: IntArray, color2: IntArray, blend: Int): IntArray {
-        val blendFactor = blend.coerceIn(0, 255) / 255.0
-        val invBlend = 1.0 - blendFactor
-        
-        return intArrayOf(
-            ((color1[0] * invBlend) + (color2[0] * blendFactor)).toInt().coerceIn(0, 255),
-            ((color1[1] * invBlend) + (color2[1] * blendFactor)).toInt().coerceIn(0, 255),
-            ((color1[2] * invBlend) + (color2[2] * blendFactor)).toInt().coerceIn(0, 255)
-        )
+    private fun colorBlend(color1: RgbColor, color2: RgbColor, blend: Int): RgbColor {
+        return ColorUtils.blend(color1, color2, blend)
     }
 }
 

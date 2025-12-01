@@ -1,5 +1,6 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import java.util.Random
@@ -139,7 +140,7 @@ class BlurzAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val brightness = pixelBrightness[x][y].toInt() and 0xFF
         val hue = pixelHue[x][y].toInt() and 0xFF
 
@@ -149,16 +150,16 @@ class BlurzAnimation : LedAnimation {
             val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]
             val brightnessFactor = brightness / 255.0
-            var rFinal = (baseColor[0] * brightnessFactor).toInt()
-            var gFinal = (baseColor[1] * brightnessFactor).toInt()
-            var bFinal = (baseColor[2] * brightnessFactor).toInt()
+            var rFinal = (baseColor.r * brightnessFactor).toInt()
+            var gFinal = (baseColor.g * brightnessFactor).toInt()
+            var bFinal = (baseColor.b * brightnessFactor).toInt()
             
             // Apply the same brightness boost as original
             rFinal = min(255, (rFinal * 3) / 2)
             gFinal = min(255, (gFinal * 3) / 2)
             bFinal = min(255, (bFinal * 3) / 2)
             
-            return intArrayOf(rFinal.coerceIn(0, 255), gFinal.coerceIn(0, 255), bFinal.coerceIn(0, 255))
+            return RgbColor(rFinal.coerceIn(0, 255), gFinal.coerceIn(0, 255), bFinal.coerceIn(0, 255))
         } else {
             // Use HSV conversion (original behavior)
             val h = hue / 255.0 * 360.0
@@ -184,13 +185,13 @@ class BlurzAnimation : LedAnimation {
             gFinal = min(255, (gFinal * 3) / 2)
             bFinal = min(255, (bFinal * 3) / 2)
 
-            return intArrayOf(rFinal, gFinal, bFinal)
+            return RgbColor(rFinal, gFinal, bFinal)
         }
     }
 
     override fun getName(): String = "Blurz"
 
-    fun cleanup() {
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(soundLevelLock) {

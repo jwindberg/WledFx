@@ -1,4 +1,5 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
 
 /**
  * Maps LED indices by lighting one LED at a time in sequence.
@@ -29,9 +30,9 @@ class LedMapperAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         // Returns black for all - we'll set the LED directly in render loop
-        return intArrayOf(0, 0, 0)
+        return RgbColor.BLACK
     }
 
     override fun getName(): String = "LED Mapper"

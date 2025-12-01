@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.random.Random
 
@@ -16,16 +18,16 @@ class TetrixAnimation : LedAnimation {
         var pos: Float = 0f,        // Current position (from top)
         var col: Int = 0,           // Color index
         var brick: Int = 0,         // Size of current brick
-        var stackColors: MutableList<IntArray> = mutableListOf(),  // Colors of stacked bricks
+        var stackColors: MutableList<RgbColor> = mutableListOf(),  // Colors of stacked bricks
         var initialized: Boolean = false,  // Whether this column has been initialized
         var startDelay: Int = 0  // Random delay before first brick starts (in frames)
     )
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixelColors: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
     private var currentPalette: Palette? = null
-    private var currentColor: IntArray = intArrayOf(0, 0, 0) // SEGCOLOR(1)
+    private var currentColor: RgbColor = RgbColor.BLACK // SEGCOLOR(1)
     private var oneColor: Boolean = false  // check1 - use only one color from palette
     private var intensity: Int = 128      // Controls brick size
     private var speed: Int = 128          // Speed control (0-255)
@@ -50,18 +52,18 @@ class TetrixAnimation : LedAnimation {
 
     override fun supportsColor(): Boolean = true
 
-    override fun setColor(r: Int, g: Int, b: Int) {
-        currentColor = intArrayOf(r, g, b)
+    override fun setColor(color: RgbColor) {
+        currentColor = color
     }
 
-    override fun getColor(): IntArray {
-        return currentColor.clone()
+    override fun getColor(): RgbColor? {
+        return currentColor
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         
         // Initialize drops for each column (virtual strip)
         drops.clear()
@@ -79,7 +81,7 @@ class TetrixAnimation : LedAnimation {
         // Initialize all pixels to black
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y] = intArrayOf(0, 0, 0)
+                pixelColors[x][y] = RgbColor.BLACK
             }
         }
         
@@ -126,7 +128,7 @@ class TetrixAnimation : LedAnimation {
             drop.startDelay--
             // Draw black while waiting
             for (y in 0 until stripLength) {
-                pixelColors[stripNr][y] = intArrayOf(0, 0, 0)
+                pixelColors[stripNr][y] = RgbColor.BLACK
             }
             return
         }
@@ -203,7 +205,7 @@ class TetrixAnimation : LedAnimation {
                             getColorFromPalette(drop.col)
                         }
                         // Background (black)
-                        else -> intArrayOf(0, 0, 0)
+                        else -> RgbColor.BLACK
                     }
                     pixelColors[stripNr][y] = color
                 }
@@ -240,7 +242,7 @@ class TetrixAnimation : LedAnimation {
                             }
                         }
                         // Background (black)
-                        else -> intArrayOf(0, 0, 0)
+                        else -> RgbColor.BLACK
                     }
                     pixelColors[stripNr][y] = color
                 }
@@ -261,7 +263,7 @@ class TetrixAnimation : LedAnimation {
             
             if (currentTime < fadeEndTime) {
                 // Fade the strip (blend with black background)
-                val black = intArrayOf(0, 0, 0)
+                val black = RgbColor.BLACK
                 for (y in 0 until stripLength) {
                     pixelColors[stripNr][y] = blendPixelColor(
                         pixelColors[stripNr][y],
@@ -281,78 +283,48 @@ class TetrixAnimation : LedAnimation {
         }
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y].clone()
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Tetrix"
 
-    fun cleanup() {
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
+
+    override fun cleanup() {
         drops.clear()
     }
 
-    private fun getColorFromPalette(colorIndex: Int): IntArray {
+    private fun getColorFromPalette(colorIndex: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val paletteIdx = (colorIndex / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             return currentPalette[paletteIdx]
         } else {
             // Default rainbow
-            return hsvToRgb(colorIndex, 255, 255)
+            return ColorUtils.hsvToRgb(colorIndex, 255, 255)
         }
     }
 
-    private fun blendPixelColor(color1: IntArray, color2: IntArray, blendAmount: Int): IntArray {
-        val blend = blendAmount.coerceIn(0, 255) / 255.0
-        val invBlend = 1.0 - blend
-        return intArrayOf(
-            ((color1[0] * invBlend + color2[0] * blend)).toInt().coerceIn(0, 255),
-            ((color1[1] * invBlend + color2[1] * blend)).toInt().coerceIn(0, 255),
-            ((color1[2] * invBlend + color2[2] * blend)).toInt().coerceIn(0, 255)
-        )
+    private fun blendPixelColor(color1: RgbColor, color2: RgbColor, blendAmount: Int): RgbColor {
+        return ColorUtils.blend(color1, color2, blendAmount)
     }
 
     private fun map(value: Int, inMin: Int, inMax: Int, outMin: Double, outMax: Double): Double {
         if (inMax == inMin) return outMin
         return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
-    }
-
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).toInt()
-            return intArrayOf(gray, gray, gray)
-        }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).toInt().coerceIn(0, 255),
-            (g * 255).toInt().coerceIn(0, 255),
-            (b * 255).toInt().coerceIn(0, 255)
-        )
     }
 }
 

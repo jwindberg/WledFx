@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -10,7 +13,7 @@ class ScrollingTextAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixels: Array<Array<IntArray>>
+    private lateinit var pixels: Array<Array<RgbColor>>
 
     private var text: String = DEFAULT_TEXT
     private var scrollOffset: Double = 0.0
@@ -18,11 +21,22 @@ class ScrollingTextAnimation : LedAnimation {
     private var lastUpdateNanos: Long = 0L
     private var hueOffset: Int = 0
     private var speedFactor: Double = 1.0
+    private var currentPalette: Palette? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixels = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixels = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         scrollOffset = combinedWidth.toDouble()
         computeTextMetrics()
         lastUpdateNanos = System.nanoTime()
@@ -62,9 +76,7 @@ class ScrollingTextAnimation : LedAnimation {
                     val actualX = (currentX + col).roundToInt()
                     if (actualX !in 0 until combinedWidth) continue
                     if ((rowBits shr (CHAR_WIDTH - 1 - col)) and 1 == 1) {
-                        pixels[actualX][actualY][0] = rgb[0]
-                        pixels[actualX][actualY][1] = rgb[1]
-                        pixels[actualX][actualY][2] = rgb[2]
+                        pixels[actualX][actualY] = rgb
                     }
                 }
             }
@@ -74,40 +86,38 @@ class ScrollingTextAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (::pixels.isInitialized && x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixels[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixels[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Scrolling Text"
 
-    fun cleanup() {
+    override fun cleanup() {
         // no resources to release
     }
 
-    fun setText(value: String?) {
+    override fun supportsTextInput(): Boolean = true
+
+    override fun setText(value: String?) {
         text = (value?.ifBlank { DEFAULT_TEXT } ?: DEFAULT_TEXT)
             .uppercase()
         computeTextMetrics()
     }
 
-    fun setSpeedFactor(value: Double) {
+    override fun supportsSpeedFactor(): Boolean = true
+
+    override fun setSpeedFactor(value: Double) {
         speedFactor = value.coerceIn(MIN_SPEED_FACTOR, MAX_SPEED_FACTOR)
     }
 
     private fun clear() {
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixels[x][y][0] = 0
-                pixels[x][y][1] = 0
-                pixels[x][y][2] = 0
+                pixels[x][y] = RgbColor.BLACK
             }
         }
     }
@@ -121,38 +131,16 @@ class ScrollingTextAnimation : LedAnimation {
         scrollOffset = min(scrollOffset, combinedWidth.toDouble())
     }
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = value / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            return ColorUtils.hsvToRgb(hue, saturation, value)
         }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255),
-        )
     }
 
     companion object {

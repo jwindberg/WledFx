@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -12,7 +14,7 @@ class BlackHoleAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
     private var currentPalette: Palette? = null
 
     private var speed: Int = 128
@@ -38,7 +40,7 @@ class BlackHoleAnimation : LedAnimation {
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTime = System.currentTimeMillis()
     }
 
@@ -81,7 +83,7 @@ class BlackHoleAnimation : LedAnimation {
 
         val centerX = combinedWidth / 2
         val centerY = combinedHeight / 2
-        setPixelColor(centerX, centerY, intArrayOf(255, 255, 255))
+        setPixelColor(centerX, centerY, RgbColor.WHITE)
 
         if (blur) {
             val blurAmount = 16
@@ -92,69 +94,94 @@ class BlackHoleAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y].clone()
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Black Hole"
 
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
+
     private fun fadeToBlack(amount: Int) {
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (c in 0 until 3) {
-                    pixelColors[x][y][c] = max(0, pixelColors[x][y][c] - amount)
-                }
+                val current = pixelColors[x][y]
+                pixelColors[x][y] = RgbColor(
+                    max(0, current.r - amount),
+                    max(0, current.g - amount),
+                    max(0, current.b - amount)
+                )
             }
         }
     }
 
     private fun applyBlur(amount: Int, @Suppress("UNUSED_PARAMETER") smear: Boolean) {
         if (amount <= 0) return
-        val temp = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
 
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (c in 0 until 3) {
-                    var sum = 0
-                    var count = 0
+                var sumR = 0
+                var sumG = 0
+                var sumB = 0
+                var count = 0
 
-                    for (dx in -1..1) {
-                        for (dy in -1..1) {
-                            val nx = x + dx
-                            val ny = y + dy
-                            if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
-                                sum += pixelColors[nx][ny][c]
-                                count++
-                            }
+                for (dx in -1..1) {
+                    for (dy in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                            val color = pixelColors[nx][ny]
+                            sumR += color.r
+                            sumG += color.g
+                            sumB += color.b
+                            count++
                         }
                     }
-
-                    val blurred = if (count > 0) sum / count else pixelColors[x][y][c]
-                    temp[x][y][c] = (pixelColors[x][y][c] * (255 - amount) + blurred * amount) / 255
                 }
+
+                val current = pixelColors[x][y]
+                val blurredR = if (count > 0) sumR / count else current.r
+                val blurredG = if (count > 0) sumG / count else current.g
+                val blurredB = if (count > 0) sumB / count else current.b
+                
+                temp[x][y] = RgbColor(
+                    (current.r * (255 - amount) + blurredR * amount) / 255,
+                    (current.g * (255 - amount) + blurredG * amount) / 255,
+                    (current.b * (255 - amount) + blurredB * amount) / 255
+                )
             }
         }
 
         pixelColors = temp
     }
 
-    private fun setPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun setPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y][0] = rgb[0].coerceIn(0, 255)
-            pixelColors[x][y][1] = rgb[1].coerceIn(0, 255)
-            pixelColors[x][y][2] = rgb[2].coerceIn(0, 255)
+            pixelColors[x][y] = rgb
         }
     }
 
-    private fun addPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
-            pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
-            pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+            val current = pixelColors[x][y]
+            pixelColors[x][y] = RgbColor(
+                (current.r + rgb.r).coerceAtMost(255),
+                (current.g + rgb.g).coerceAtMost(255),
+                (current.b + rgb.b).coerceAtMost(255)
+            )
         }
     }
 
@@ -165,7 +192,7 @@ class BlackHoleAnimation : LedAnimation {
         return min + ((sine + 1.0) * range / 2.0).roundToInt()
     }
 
-    private fun colorFromPalette(hue: Int, wrap: Boolean, brightness: Int): IntArray {
+    private fun colorFromPalette(hue: Int, wrap: Boolean, brightness: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             // Use the actual palette - map hue index (0-255) to palette array
@@ -174,42 +201,12 @@ class BlackHoleAnimation : LedAnimation {
             val baseColor = currentPalette[paletteIndex]
             // Apply brightness scaling
             val brightnessFactor = brightness / 255.0
-            return intArrayOf(
-                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
-                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
-                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
-            )
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
         } else {
             // Fall back to HSV if no palette is set
             val adjustedHue = if (wrap) hue else hue % 256
-            val h = (adjustedHue % 256) / 255.0f * 360.0f
-            val s = 1.0f
-            val v = brightness / 255.0f
-            return hsvToRgb(h, s, v)
+            return ColorUtils.hsvToRgb(adjustedHue, 255, brightness)
         }
-    }
-
-    private fun hsvToRgb(h: Float, s: Float, v: Float): IntArray {
-        val hi = ((h / 60.0f) % 6).toInt()
-        val f = h / 60.0f - hi
-        val p = v * (1 - s)
-        val q = v * (1 - f * s)
-        val t = v * (1 - (1 - f) * s)
-
-        val (r, g, b) = when (hi) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
     }
 }
 

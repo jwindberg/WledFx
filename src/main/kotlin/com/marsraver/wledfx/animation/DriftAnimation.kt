@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.PI
 import kotlin.math.cos
@@ -13,14 +16,25 @@ class DriftAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixelColors: Array<Array<IntArray>>
-    private lateinit var tempBuffer: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
+    private lateinit var tempBuffer: Array<Array<RgbColor>>
+    private var currentPalette: Palette? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
-        tempBuffer = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+        tempBuffer = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
     }
 
     override fun update(now: Long): Boolean {
@@ -55,35 +69,29 @@ class DriftAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixelColors[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Drift"
 
-    fun cleanup() {
+    override fun cleanup() {
         // no resources to release
     }
 
     private fun clear() {
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = 0
-                pixelColors[x][y][1] = 0
-                pixelColors[x][y][2] = 0
+                pixelColors[x][y] = RgbColor.BLACK
             }
         }
     }
 
-    private fun drawPixelXYF(x: Double, y: Double, rgb: IntArray) {
+    private fun drawPixelXYF(x: Double, y: Double, rgb: RgbColor) {
         val floorX = x.toInt()
         val floorY = y.toInt()
         val fracX = (x - floorX).coerceIn(0.0, 1.0)
@@ -105,9 +113,12 @@ class DriftAnimation : LedAnimation {
             val yy = floorY + dy
             if (xx !in 0 until combinedWidth || yy !in 0 until combinedHeight) continue
 
-            pixelColors[xx][yy][0] = (pixelColors[xx][yy][0] + rgb[0] * weight).roundToInt().coerceAtMost(255)
-            pixelColors[xx][yy][1] = (pixelColors[xx][yy][1] + rgb[1] * weight).roundToInt().coerceAtMost(255)
-            pixelColors[xx][yy][2] = (pixelColors[xx][yy][2] + rgb[2] * weight).roundToInt().coerceAtMost(255)
+            val current = pixelColors[xx][yy]
+            pixelColors[xx][yy] = RgbColor(
+                (current.r + rgb.r * weight).roundToInt().coerceAtMost(255),
+                (current.g + rgb.g * weight).roundToInt().coerceAtMost(255),
+                (current.b + rgb.b * weight).roundToInt().coerceAtMost(255)
+            )
         }
     }
 
@@ -115,64 +126,51 @@ class DriftAnimation : LedAnimation {
         if (amount <= 0) return
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (channel in 0 until 3) {
-                    var sum = 0
-                    var weight = 0
-                    for (dx in -1..1) {
-                        for (dy in -1..1) {
-                            val nx = x + dx
-                            val ny = y + dy
-                            if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
-                                val w = if (dx == 0 && dy == 0) 4 else 1
-                                sum += pixelColors[nx][ny][channel] * w
-                                weight += w
-                            }
+                var sumR = 0
+                var sumG = 0
+                var sumB = 0
+                var weight = 0
+                for (dx in -1..1) {
+                    for (dy in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                            val w = if (dx == 0 && dy == 0) 4 else 1
+                            val color = pixelColors[nx][ny]
+                            sumR += color.r * w
+                            sumG += color.g * w
+                            sumB += color.b * w
+                            weight += w
                         }
                     }
-                    tempBuffer[x][y][channel] = (pixelColors[x][y][channel] * (255 - amount) + (sum / weight) * amount) / 255
                 }
+                val current = pixelColors[x][y]
+                val blurredR = if (weight > 0) sumR / weight else current.r
+                val blurredG = if (weight > 0) sumG / weight else current.g
+                val blurredB = if (weight > 0) sumB / weight else current.b
+                tempBuffer[x][y] = RgbColor(
+                    (current.r * (255 - amount) + blurredR * amount) / 255,
+                    (current.g * (255 - amount) + blurredG * amount) / 255,
+                    (current.b * (255 - amount) + blurredB * amount) / 255
+                )
             }
         }
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = tempBuffer[x][y][0]
-                pixelColors[x][y][1] = tempBuffer[x][y][1]
-                pixelColors[x][y][2] = tempBuffer[x][y][2]
+                pixelColors[x][y] = tempBuffer[x][y]
             }
         }
     }
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = value / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            return ColorUtils.hsvToRgb(hue, saturation, value)
         }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
     }
 }

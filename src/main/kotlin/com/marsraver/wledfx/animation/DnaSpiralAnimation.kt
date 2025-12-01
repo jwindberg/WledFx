@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.PI
 import kotlin.math.abs
@@ -12,14 +15,25 @@ class DnaSpiralAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixelColors: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
     private var lastUpdateNs: Long = 0L
     private var hueOffset: Int = 0
+    private var currentPalette: Palette? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         lastUpdateNs = 0L
         hueOffset = 0
     }
@@ -66,23 +80,21 @@ class DnaSpiralAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixelColors[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
-        } else intArrayOf(0, 0, 0)
+            pixelColors[x][y]
+        } else {
+            RgbColor.BLACK
+        }
     }
 
     override fun getName(): String = "DNA Spiral"
 
-    fun cleanup() {
+    override fun cleanup() {
         // nothing to dispose
     }
 
-    private fun drawLine(x0: Int, x1: Int, y: Int, rgb: IntArray, addDot: Boolean, gradient: Boolean) {
+    private fun drawLine(x0: Int, x1: Int, y: Int, rgb: RgbColor, addDot: Boolean, gradient: Boolean) {
         val clampedY = y.coerceIn(0, combinedHeight - 1)
         val start = x0.coerceIn(0, combinedWidth - 1)
         val end = x1.coerceIn(0, combinedWidth - 1)
@@ -91,70 +103,46 @@ class DnaSpiralAnimation : LedAnimation {
             val t = step / (steps - 1.0).coerceAtLeast(1.0)
             val x = lerp(start, end, t).roundToInt().coerceIn(0, combinedWidth - 1)
             val scale = if (gradient) (t * 255).roundToInt().coerceIn(0, 255) else 255
-            val scaled = intArrayOf(
-                rgb[0] * scale / 255,
-                rgb[1] * scale / 255,
-                rgb[2] * scale / 255,
-            )
+            val scaled = ColorUtils.scaleBrightness(rgb, scale / 255.0)
             addPixelColor(x, clampedY, scaled)
         }
 
         if (addDot) {
             val head = start.coerceIn(0, combinedWidth - 1)
             val tail = end.coerceIn(0, combinedWidth - 1)
-            addPixelColor(head, clampedY, intArrayOf(72, 61, 139)) // DarkSlateGray
-            addPixelColor(tail, clampedY, intArrayOf(255, 255, 255)) // White
+            addPixelColor(head, clampedY, RgbColor(72, 61, 139)) // DarkSlateGray
+            addPixelColor(tail, clampedY, RgbColor.WHITE)
         }
     }
 
     private fun fadeDown() {
+        val factor = 120.0 / 256.0
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = pixelColors[x][y][0] * 120 / 256
-                pixelColors[x][y][1] = pixelColors[x][y][1] * 120 / 256
-                pixelColors[x][y][2] = pixelColors[x][y][2] * 120 / 256
+                pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }
 
-    private fun addPixelColor(x: Int, y: Int, rgb: IntArray) {
-        pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
-        pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
-        pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+    private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
+        val current = pixelColors[x][y]
+        pixelColors[x][y] = RgbColor(
+            (current.r + rgb.r).coerceAtMost(255),
+            (current.g + rgb.g).coerceAtMost(255),
+            (current.b + rgb.b).coerceAtMost(255)
+        )
     }
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = value / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            return ColorUtils.hsvToRgb(hue, saturation, value)
         }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255),
-        )
     }
 
     private fun beatsin8(speed: Int, minValue: Int, maxValue: Int, timebase: Int, phase: Int): Int {

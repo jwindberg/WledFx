@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -17,6 +20,17 @@ class TartanAnimation : LedAnimation {
     private var hueBase: Int = 0
     private var hueAccumulatorMs: Double = 0.0
     private var lastUpdateNanos: Long = 0L
+    private var currentPalette: Palette? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -48,9 +62,9 @@ class TartanAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
 
         val hueX = (x * horizontalScale + offsetY + hueBase).toFloat()
@@ -61,16 +75,16 @@ class TartanAnimation : LedAnimation {
         val brightnessY = sin8(y * 18.0 + offsetY)
         val colorY = hsvToRgb(hueY, 200, brightnessY)
 
-        return intArrayOf(
-            (colorX[0] + colorY[0]).coerceAtMost(255),
-            (colorX[1] + colorY[1]).coerceAtMost(255),
-            (colorX[2] + colorY[2]).coerceAtMost(255),
+        return RgbColor(
+            (colorX.r + colorY.r).coerceAtMost(255),
+            (colorX.g + colorY.g).coerceAtMost(255),
+            (colorX.b + colorY.b).coerceAtMost(255)
         )
     }
 
     override fun getName(): String = "Tartan"
 
-    fun cleanup() {
+    override fun cleanup() {
         // No resources to release; provided for interface parity.
     }
 
@@ -94,38 +108,20 @@ class TartanAnimation : LedAnimation {
         return ((sine + 1.0) * 127.5).roundToInt().coerceIn(0, 255)
     }
 
-    private fun hsvToRgb(hue: Float, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0f
-        val v = value.coerceIn(0, 255) / 255.0f
-
-        if (s <= 0f) {
-            val gray = (v * 255).roundToInt().coerceIn(0, 255)
-            return intArrayOf(gray, gray, gray)
+    private fun hsvToRgb(hue: Float, saturation: Int, value: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val h = (hue % 256 + 256) % 256
+            val paletteIndex = (h / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = value / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            val h = (hue % 256 + 256) % 256
+            val s = saturation.coerceIn(0, 255) / 255.0f
+            val v = value.coerceIn(0, 255) / 255.0f
+            return ColorUtils.hsvToRgb(h * 360.0f / 255.0f, s, v)
         }
-
-        val hueSection = h / 42.666668f
-        val i = hueSection.toInt()
-        val f = hueSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
     }
 }
 

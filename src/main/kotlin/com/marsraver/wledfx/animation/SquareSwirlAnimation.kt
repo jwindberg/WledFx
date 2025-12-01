@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.PI
 import kotlin.math.max
@@ -13,103 +16,134 @@ class SquareSwirlAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixelColors: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
+    private var currentPalette: Palette? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
     }
 
     override fun update(now: Long): Boolean {
-        val timeSeconds = now / 1_000_000_000.0
-        val blurWave = beatsin(timeSeconds, 3.0, 64, 192)
+        val timeMs = now / 1_000_000
+        
+        // Apply blurring - blurAmount oscillates using beatsin8(3, 64, 192) then dim8_raw
+        val blurWave = beatsin8(3, 64, 192, timeMs)
         val blurAmount = dim8Raw(blurWave)
         applyBlur(blurAmount)
 
+        // Calculate border width (equivalent to kBorderWidth = 1 in original, but scaled)
         val border = max(1, min(combinedWidth, combinedHeight) / 16)
-        val maxX = combinedWidth - 1 - border
-        val maxY = combinedHeight - 1 - border
+        val maxX = (combinedWidth - 1 - border).coerceAtLeast(border)
+        val maxY = (combinedHeight - 1 - border).coerceAtLeast(border)
 
-        val i = beatsin(timeSeconds, 91.0, border, maxX)
-        val j = beatsin(timeSeconds, 109.0, border, maxY, 0.125)
-        val k = beatsin(timeSeconds, 73.0, border, maxY, 0.25)
+        // Use three out-of-sync sine waves
+        // In original: all use same range (border to squareWidth-border) since it's a square grid
+        // For non-square grids, we use the minimum dimension to maintain the square-like behavior
+        val maxCoord = min(maxX, maxY)
+        val i = beatsin8(91, border, maxCoord, timeMs)
+        val j = beatsin8(109, border, maxCoord, timeMs)
+        val k = beatsin8(73, border, maxCoord, timeMs)
 
-        val ms = now / 1_000_000
-        val hue1 = ((ms / 29) % 256).toInt()
-        val hue2 = ((ms / 41) % 256).toInt()
-        val hue3 = ((ms / 73) % 256).toInt()
+        // The color of each point shifts over time, each at a different speed
+        val hue1 = ((timeMs / 29) % 256).toInt()
+        val hue2 = ((timeMs / 41) % 256).toInt()
+        val hue3 = ((timeMs / 73) % 256).toInt()
 
-        addPixelColor(i, j, hsvToRgb(hue1, 200, 255))
-        addPixelColor(j, k, hsvToRgb(hue2, 200, 255))
-        addPixelColor(k, i, hsvToRgb(hue3, 200, 255))
+        // Add colors using additive blending (equivalent to += in FastLED)
+        // Note: i, j, k are used as both x and y coordinates in different combinations
+        // Original: XY(i,j), XY(j,k), XY(k,i) - all within square bounds
+        addPixelColor(i.coerceIn(0, combinedWidth - 1), j.coerceIn(0, combinedHeight - 1), hsvToRgb(hue1, 200, 255))
+        addPixelColor(j.coerceIn(0, combinedWidth - 1), k.coerceIn(0, combinedHeight - 1), hsvToRgb(hue2, 200, 255))
+        addPixelColor(k.coerceIn(0, combinedWidth - 1), i.coerceIn(0, combinedHeight - 1), hsvToRgb(hue3, 200, 255))
 
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixelColors[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Square Swirl"
 
-    fun cleanup() {
+    override fun cleanup() {
         // No resources to release.
     }
 
     private fun applyBlur(amount: Int) {
         if (amount <= 0) return
         val factor = amount.coerceIn(0, 255)
-        val temp = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (channel in 0 until 3) {
-                    var sum = 0
-                    var weight = 0
-                    for (dx in -1..1) {
-                        for (dy in -1..1) {
-                            val nx = x + dx
-                            val ny = y + dy
-                            if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
-                                val w = if (dx == 0 && dy == 0) 4 else 1
-                                sum += pixelColors[nx][ny][channel] * w
-                                weight += w
-                            }
+                var sumR = 0
+                var sumG = 0
+                var sumB = 0
+                var weight = 0
+                for (dx in -1..1) {
+                    for (dy in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                            val w = if (dx == 0 && dy == 0) 4 else 1
+                            val color = pixelColors[nx][ny]
+                            sumR += color.r * w
+                            sumG += color.g * w
+                            sumB += color.b * w
+                            weight += w
                         }
                     }
-                    val average = if (weight == 0) pixelColors[x][y][channel] else sum / weight
-                    temp[x][y][channel] =
-                        (pixelColors[x][y][channel] * (255 - factor) + average * factor) / 255
                 }
+                val current = pixelColors[x][y]
+                val averageR = if (weight == 0) current.r else sumR / weight
+                val averageG = if (weight == 0) current.g else sumG / weight
+                val averageB = if (weight == 0) current.b else sumB / weight
+                temp[x][y] = RgbColor(
+                    (current.r * (255 - factor) + averageR * factor) / 255,
+                    (current.g * (255 - factor) + averageG * factor) / 255,
+                    (current.b * (255 - factor) + averageB * factor) / 255
+                )
             }
         }
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = temp[x][y][0]
-                pixelColors[x][y][1] = temp[x][y][1]
-                pixelColors[x][y][2] = temp[x][y][2]
+                pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
-    private fun beatsin(
-        timeSeconds: Double,
-        bpm: Double,
-        low: Int,
-        high: Int,
-        phaseOffset: Double = 0.0,
-    ): Int {
-        val freq = bpm / 60.0
-        val angle = 2.0 * PI * (freq * timeSeconds + phaseOffset)
-        val sine = sin(angle)
+    /**
+     * beatsin8 - FastLED's beatsin8 function
+     * Creates a sine wave that oscillates at the given BPM (beats per minute)
+     * @param bpm beats per minute (frequency of oscillation)
+     * @param low minimum value
+     * @param high maximum value
+     * @param timeMs current time in milliseconds
+     * @return value oscillating between low and high at the given BPM
+     */
+    private fun beatsin8(bpm: Int, low: Int, high: Int, timeMs: Long): Int {
+        // Convert BPM to frequency (beats per second), then to radians per millisecond
+        val beatsPerSecond = bpm / 60.0
+        val radiansPerMs = beatsPerSecond * 2.0 * PI / 1000.0
+        val phase = timeMs * radiansPerMs
+        val sine = sin(phase)
+        
+        // Map sine wave (-1 to 1) to range (low to high)
         val mid = (low + high) / 2.0
         val range = (high - low) / 2.0
         return (mid + sine * range).roundToInt().coerceIn(min(low, high), max(low, high))
@@ -120,46 +154,27 @@ class SquareSwirlAnimation : LedAnimation {
         return ((v * v) / 255.0).roundToInt().coerceIn(0, 255)
     }
 
-    private fun addPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
-            pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
-            pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+            val current = pixelColors[x][y]
+            pixelColors[x][y] = RgbColor(
+                (current.r + rgb.r).coerceAtMost(255),
+                (current.g + rgb.g).coerceAtMost(255),
+                (current.b + rgb.b).coerceAtMost(255)
+            )
         }
     }
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = value / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            return ColorUtils.hsvToRgb(hue, saturation, value)
         }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
     }
 }
 

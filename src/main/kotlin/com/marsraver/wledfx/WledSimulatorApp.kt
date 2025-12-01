@@ -2,46 +2,10 @@ package com.marsraver.wledfx
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.marsraver.wledfx.animation.AkemiAnimation
-import com.marsraver.wledfx.animation.AndroidAnimation
-import com.marsraver.wledfx.animation.AuroraAnimation
-import com.marsraver.wledfx.animation.BlackHoleAnimation
-import com.marsraver.wledfx.animation.BlendsAnimation
-import com.marsraver.wledfx.animation.BlobsAnimation
-import com.marsraver.wledfx.animation.BlurzAnimation
-import com.marsraver.wledfx.animation.BpmAnimation
-import com.marsraver.wledfx.animation.BouncingBallAnimation
-import com.marsraver.wledfx.animation.BreatheAnimation
-import com.marsraver.wledfx.animation.CandleAnimation
-import com.marsraver.wledfx.animation.ChunChunAnimation
-import com.marsraver.wledfx.animation.ColoredBurstsAnimation
-import com.marsraver.wledfx.animation.CrazyBeesAnimation
-import com.marsraver.wledfx.animation.DistortionWavesAnimation
-import com.marsraver.wledfx.animation.DjLightAnimation
-import com.marsraver.wledfx.animation.DnaAnimation
-import com.marsraver.wledfx.animation.DnaSpiralAnimation
-import com.marsraver.wledfx.animation.DriftAnimation
-import com.marsraver.wledfx.animation.DriftRoseAnimation
-import com.marsraver.wledfx.animation.FrizzlesAnimation
-import com.marsraver.wledfx.animation.GeqAnimation
 import com.marsraver.wledfx.animation.LedAnimation
-import com.marsraver.wledfx.animation.ScrollingTextAnimation
-import com.marsraver.wledfx.animation.SinDotsAnimation
-import com.marsraver.wledfx.animation.SnakeAnimation
-import com.marsraver.wledfx.animation.RippleRainbowAnimation
-import com.marsraver.wledfx.animation.RainAnimation
-import com.marsraver.wledfx.animation.SwirlAnimation
-import com.marsraver.wledfx.animation.TartanAnimation
-import com.marsraver.wledfx.animation.TetrixAnimation
-import com.marsraver.wledfx.animation.TwinkleFoxAnimation
-import com.marsraver.wledfx.animation.TwinkleUpAnimation
-import com.marsraver.wledfx.animation.WashingMachineAnimation
-import com.marsraver.wledfx.animation.WavingCellAnimation
-import com.marsraver.wledfx.animation.WaverlyAnimation
-import com.marsraver.wledfx.palette.Palettes
-import com.marsraver.wledfx.animation.SquareSwirlAnimation
-import com.marsraver.wledfx.animation.SoapAnimation
-import com.marsraver.wledfx.animation.SunRadiationAnimation
+import com.marsraver.wledfx.AnimationRegistry
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.Palettes
 import com.marsraver.wledfx.wled.WledDdpClient
 import com.marsraver.wledfx.wled.WledClient
 import com.marsraver.wledfx.wled.model.WledConfig
@@ -101,14 +65,18 @@ class WledSimulatorApp : Application() {
     private var animationTimer: AnimationTimer? = null
     private var currentAnimation: LedAnimation? = null
     private val running = AtomicBoolean(false)
-    private val animationColorStates = mutableMapOf<String, IntArray>()  // Store color state per animation
+    private val animationColorStates = mutableMapOf<String, com.marsraver.wledfx.color.RgbColor>()  // Store color state per animation
     private val animationPaletteStates = mutableMapOf<String, String>()  // Store palette state per animation
     private lateinit var startButton: Button
     private lateinit var statusLabel: Label
+    private lateinit var retryButton: Button
     private lateinit var animationComboBox: ComboBox<String>
+    private val failedDevices = mutableListOf<DeviceConfig>()
     private lateinit var brightnessSlider: Slider
     private lateinit var brightnessLabel: Label
     private var brightnessScale: Double = 1.0
+    private lateinit var speedSlider: Slider
+    private lateinit var speedLabel: Label
     private lateinit var textInputLabel: Label
     private lateinit var textInputField: TextField
     private lateinit var textSpeedLabel: Label
@@ -122,9 +90,8 @@ class WledSimulatorApp : Application() {
     private lateinit var paletteLabel: Label
     private lateinit var candleMultiCheckBox: CheckBox
     private lateinit var twinkleCheckBox: CheckBox
+    private lateinit var puddlesPeakCheckBox: CheckBox
     private var lastRandomSwitchNs: Long = 0L
-    private var debugStartNs: Long = 0L
-    private var gridDebugLogged = false
 
     private val combinedWidth = VIRTUAL_GRID_WIDTH
     private val combinedHeight = VIRTUAL_GRID_HEIGHT
@@ -138,53 +105,19 @@ class WledSimulatorApp : Application() {
         gc = canvas.graphicsContext2D
 
         statusLabel = Label("Connecting to WLED devices...")
+        
+        retryButton = Button("Retry Connection").apply {
+            isVisible = false
+            isManaged = false
+            setOnAction {
+                retryConnections()
+            }
+        }
 
         animationComboBox = ComboBox<String>().apply {
-            val animationNames = listOf(
-                "Akemi",
-                "Android",
-                "Aurora",
-                "Black Hole",
-                "Blends",
-                "Blobs",
-                "Blurz",
-                "BPM",
-                "Bouncing Ball",
-                "Breathe",
-                "Candle",
-                "ChunChun",
-                "Colored Bursts",
-                "Crazy Bees",
-                "DNA",
-                "DNA Spiral",
-                "Distortion Waves",
-                "DJLight",
-                "Drift",
-                "Drift Rose",
-                "Frizzles",
-                "GEQ",
-                "Rain",
-                "Ripple Rainbow",
-                "Scrolling Text",
-                "SinDots",
-                "Snake",
-                "Soap",
-                "Square Swirl",
-                "Sun Radiation",
-                "Swirl",
-                "Tartan",
-                "Tetrix",
-                "TwinkleFox",
-                "TwinkleUp",
-                "Washing Machine",
-                "Waverly",
-                "Waving Cell",
-            ).sortedBy { it.lowercase() }
+            val animationNames = AnimationRegistry.getNames()
             items.addAll(animationNames)
-            value = when {
-                animationNames.contains("Snake") -> "Snake"
-                else -> animationNames.firstOrNull() ?: ""
-            }
+            value = animationNames.firstOrNull() ?: ""
             isDisable = true
             setOnAction {
                 if (running.get()) {
@@ -247,13 +180,34 @@ class WledSimulatorApp : Application() {
                 brightnessLabel.text = "Brightness: ${percent.roundToInt()}%"
             }
         }
+        
+        speedLabel = Label("Speed: 128")
+        speedSlider = Slider(0.0, 255.0, 128.0).apply {
+            isShowTickMarks = true
+            isShowTickLabels = true
+            majorTickUnit = 64.0
+            blockIncrement = 8.0
+            orientation = Orientation.VERTICAL
+            // Invert so faster (255) is at top, slower (0) is at bottom
+            valueProperty().addListener { _, _, newValue ->
+                val newValueDouble = newValue.toDouble()
+                val invertedValue = 255.0 - newValueDouble
+                val speedValue = invertedValue.coerceIn(0.0, 255.0).roundToInt()
+                speedLabel.text = "Speed: $speedValue"
+                currentAnimation?.let { animation ->
+                    if (animation.supportsSpeed()) {
+                        animation.setSpeed(speedValue)
+                    }
+                }
+            }
+        }
 
         textInputLabel = Label("Scroll Text:")
         textInputField = TextField("HELLO WLED").apply {
             prefColumnCount = 14
             textProperty().addListener { _, _, newValue ->
                 val animation = currentAnimation
-                if (animation is ScrollingTextAnimation) {
+                if (animation != null && animation.supportsTextInput()) {
                     animation.setText(newValue)
                 }
             }
@@ -268,7 +222,7 @@ class WledSimulatorApp : Application() {
                 val percent = newValue.toDouble().coerceIn(10.0, 100.0)
                 textSpeedLabel.text = "Scroll Speed: ${percent.roundToInt()}%"
                 val animation = currentAnimation
-                if (animation is ScrollingTextAnimation) {
+                if (animation != null && animation.supportsSpeedFactor()) {
                     animation.setSpeedFactor(percent / 100.0)
                 }
             }
@@ -289,13 +243,15 @@ class WledSimulatorApp : Application() {
             valueProperty().addListener { _, _, newColor ->
                 val animation = currentAnimation
                 if (animation != null && animation.supportsColor()) {
-                    val r = (newColor.red * 255).toInt().coerceIn(0, 255)
-                    val g = (newColor.green * 255).toInt().coerceIn(0, 255)
-                    val b = (newColor.blue * 255).toInt().coerceIn(0, 255)
-                    animation.setColor(r, g, b)
+                    val rgbColor = RgbColor(
+                        (newColor.red * 255).toInt().coerceIn(0, 255),
+                        (newColor.green * 255).toInt().coerceIn(0, 255),
+                        (newColor.blue * 255).toInt().coerceIn(0, 255)
+                    )
+                    animation.setColor(rgbColor)
                     // Store the color state for this animation
                     val animationName = animation.getName()
-                    animationColorStates[animationName] = intArrayOf(r, g, b)
+                    animationColorStates[animationName] = rgbColor
                 }
             }
         }
@@ -325,6 +281,7 @@ class WledSimulatorApp : Application() {
 
         val controlsBox = HBox(10.0,
             statusLabel,
+            retryButton,
             Label("Animation:"),
             animationComboBox,
             startButton,
@@ -351,7 +308,7 @@ class WledSimulatorApp : Application() {
             isManaged = false
             selectedProperty().addListener { _, _, isSelected ->
                 val animation = currentAnimation
-                if (animation is CandleAnimation) {
+                if (animation != null && animation.supportsMultiMode()) {
                     animation.setMultiMode(isSelected)
                 }
             }
@@ -363,16 +320,35 @@ class WledSimulatorApp : Application() {
             isManaged = false
             selectedProperty().addListener { _, _, isSelected ->
                 val animation = currentAnimation
-                if (animation is TwinkleFoxAnimation) {
+                if (animation != null && animation.supportsCatMode()) {
                     animation.setCatMode(isSelected)
                 }
             }
         }
         
-        val brightnessBox = VBox(12.0, brightnessLabel, brightnessSlider, textInputLabel, textInputField, textSpeedLabel, textSpeedSlider, candleMultiCheckBox, twinkleCheckBox).apply {
+        // Puddles peak detection checkbox
+        puddlesPeakCheckBox = CheckBox("Peak Detect").apply {
+            isVisible = false
+            isManaged = false
+            selectedProperty().addListener { _, _, isSelected ->
+                val animation = currentAnimation
+                if (animation != null && animation.supportsPeakDetect()) {
+                    animation.setPeakDetect(isSelected)
+                }
+            }
+        }
+        
+        val brightnessSpeedBox = HBox(12.0).apply {
+            padding = Insets(10.0)
+            children.addAll(
+                VBox(12.0, brightnessLabel, brightnessSlider),
+                VBox(12.0, speedLabel, speedSlider)
+            )
+        }
+        val rightControlsBox = VBox(12.0, brightnessSpeedBox, textInputLabel, textInputField, textSpeedLabel, textSpeedSlider, candleMultiCheckBox, twinkleCheckBox, puddlesPeakCheckBox).apply {
             padding = Insets(10.0)
         }
-        root.right = brightnessBox
+        root.right = rightControlsBox
 
         updateAnimationControls(animationComboBox.value ?: "")
 
@@ -385,6 +361,20 @@ class WledSimulatorApp : Application() {
 
         Thread.sleep(500)
 
+        connectToDevices()
+
+        primaryStage.setOnCloseRequest {
+            stopAnimation()
+            devices.forEach { connection ->
+                sendBlackFrame(connection)
+                connection.artNetClient.disconnect()
+            }
+            println("Disconnected from all WLED devices")
+        }
+    }
+
+    private fun connectToDevices() {
+        failedDevices.clear()
         Thread {
             val connectedCount = intArrayOf(0)
             for (deviceConfig in DEVICES) {
@@ -424,6 +414,7 @@ class WledSimulatorApp : Application() {
                 } catch (ex: Exception) {
                     System.err.println("Failed to connect to ${deviceConfig.name}: ${ex.message}")
                     ex.printStackTrace()
+                    failedDevices.add(deviceConfig)
                 }
             }
 
@@ -436,28 +427,116 @@ class WledSimulatorApp : Application() {
                     startButton.isDisable = false
                     animationComboBox.isDisable = false
                     randomCheckBox.isDisable = false
+                    retryButton.isVisible = false
+                    retryButton.isManaged = false
                     startSelectedAnimation()
                     startButton.text = "Stop Animation"
                 }
                 println("Successfully connected to all ${connectedCount[0]} devices")
             } else {
                 Platform.runLater {
-                    statusLabel.text = "Connected to ${connectedCount[0]}/${DEVICES.size} devices"
+                    val failedNames = failedDevices.joinToString(", ") { it.name }
+                    statusLabel.text = "Connected to ${connectedCount[0]}/${DEVICES.size} devices. Failed: $failedNames"
                     animationComboBox.isDisable = false
                     randomCheckBox.isDisable = false
+                    retryButton.isVisible = true
+                    retryButton.isManaged = true
                 }
                 System.err.println("Warning: Only ${connectedCount[0]}/${DEVICES.size} devices connected")
             }
         }.start()
+    }
 
-        primaryStage.setOnCloseRequest {
-            stopAnimation()
-            devices.forEach { connection ->
-                sendBlackFrame(connection)
-                connection.artNetClient.disconnect()
-            }
-            println("Disconnected from all WLED devices")
+    private fun retryConnections() {
+        if (failedDevices.isEmpty()) {
+            return
         }
+
+        Platform.runLater {
+            retryButton.isDisable = true
+            statusLabel.text = "Retrying connection to ${failedDevices.size} device(s)..."
+        }
+
+        Thread {
+            val devicesToRetry = failedDevices.toList()
+            failedDevices.clear()
+            val newlyConnected = mutableListOf<DeviceConnection>()
+
+            for (deviceConfig in devicesToRetry) {
+                // Check if device is already connected
+                val alreadyConnected = devices.any { it.config.ip == deviceConfig.ip }
+                if (alreadyConnected) {
+                    println("Device ${deviceConfig.name} is already connected, skipping retry")
+                    continue
+                }
+
+                try {
+                    println("Retrying connection to ${deviceConfig.name} at ${deviceConfig.ip}...")
+                    val client = WledClient(deviceConfig.ip)
+                    val info = client.getInfo()
+                    val config = client.getConfig()
+                    val state = client.getState()
+
+                    val width = info.leds?.matrix?.w ?: deviceConfig.logicalWidth
+                    val height = info.leds?.matrix?.h ?: deviceConfig.logicalHeight
+
+                    println("Connected! Device: ${info.name}")
+                    println("Matrix size: ${width}x$height")
+                    println("Total LEDs: ${info.leds?.count}")
+
+                    val dmxConfig = config.iface?.live?.dmx
+                    val port = config.iface?.live?.port ?: 6454
+                    val universe = dmxConfig?.uni ?: 0
+                    val dmxStartAddress = dmxConfig?.addr ?: 0
+
+                    println("DMX Config - Universe: $universe, Port: $port, Start Address: $dmxStartAddress")
+
+                    // Using DDP protocol instead of Art-Net to avoid secondary color issues
+                    val artNetClient = WledDdpClient(info)
+                    artNetClient.connect()
+                    println("Connected via DDP on port 4048")
+
+                    val device = DeviceConnection(deviceConfig, info, config, state, artNetClient, width, height)
+                    devices.add(device)
+                    newlyConnected.add(device)
+                } catch (ex: Exception) {
+                    System.err.println("Retry failed for ${deviceConfig.name}: ${ex.message}")
+                    ex.printStackTrace()
+                    failedDevices.add(deviceConfig)
+                }
+            }
+
+            Platform.runLater {
+                retryButton.isDisable = false
+                
+                if (failedDevices.isEmpty()) {
+                    // All devices now connected
+                    querySyncSettings(DEVICES)
+                    statusLabel.text = "All devices connected!"
+                    retryButton.isVisible = false
+                    retryButton.isManaged = false
+                    if (devices.size == DEVICES.size) {
+                        startButton.isDisable = false
+                        animationComboBox.isDisable = false
+                        randomCheckBox.isDisable = false
+                        // If animation was already running, restart it to include newly connected devices
+                        // Otherwise, start it for the first time (matching initial connection behavior)
+                        if (running.get()) {
+                            stopAnimation()
+                        }
+                        startSelectedAnimation()
+                        startButton.text = "Stop Animation"
+                    }
+                } else {
+                    val failedNames = failedDevices.joinToString(", ") { it.name }
+                    statusLabel.text = "Connected to ${devices.size}/${DEVICES.size} devices. Failed: $failedNames"
+                }
+            }
+
+            if (newlyConnected.isNotEmpty()) {
+                println("Successfully reconnected to ${newlyConnected.size} device(s)")
+            }
+        }.start()
     }
 
     private fun startSelectedAnimation() {
@@ -466,68 +545,32 @@ class WledSimulatorApp : Application() {
             return
         }
 
-        val selectedAnimation = animationComboBox.value
-        val newAnimation: LedAnimation = when (selectedAnimation) {
-            "Snake" -> SnakeAnimation()
-            "Bouncing Ball" -> BouncingBallAnimation()
-            "Colored Bursts" -> ColoredBurstsAnimation()
-            "Black Hole" -> BlackHoleAnimation()
-            "Blends" -> BlendsAnimation()
-            "Blobs" -> BlobsAnimation()
-            "Blurz" -> BlurzAnimation()
-            "BPM" -> BpmAnimation()
-            "Breathe" -> BreatheAnimation()
-            "Candle" -> {
-                val candle = CandleAnimation()
-                // Apply multi-mode setting if checkbox is already set
-                if (::candleMultiCheckBox.isInitialized) {
-                    candle.setMultiMode(candleMultiCheckBox.isSelected)
-                }
-                candle
-            }
-            "ChunChun" -> ChunChunAnimation()
-            "Colored Bursts" -> ColoredBurstsAnimation()
-            "Crazy Bees" -> CrazyBeesAnimation()
-            "Distortion Waves" -> DistortionWavesAnimation()
-            "DJLight" -> DjLightAnimation()
-            "DNA" -> DnaAnimation()
-            "DNA Spiral" -> DnaSpiralAnimation()
-            "Drift" -> DriftAnimation()
-            "Drift Rose" -> DriftRoseAnimation()
-            "Frizzles" -> FrizzlesAnimation()
-            "GEQ" -> GeqAnimation()
-            "Swirl" -> SwirlAnimation()
-            "Akemi" -> AkemiAnimation()
-            "Android" -> AndroidAnimation()
-            "Aurora" -> AuroraAnimation()
-            "Waving Cell" -> WavingCellAnimation()
-            "Tartan" -> TartanAnimation()
-            "Tetrix" -> TetrixAnimation()
-            "TwinkleFox" -> {
-                val twinkle = TwinkleFoxAnimation()
-                // Apply twinkle setting if checkbox is already set
-                if (::twinkleCheckBox.isInitialized) {
-                    twinkle.setCatMode(twinkleCheckBox.isSelected)
-                }
-                twinkle
-            }
-            "TwinkleUp" -> TwinkleUpAnimation()
-            "Sun Radiation" -> SunRadiationAnimation()
-            "Square Swirl" -> SquareSwirlAnimation()
-            "Soap" -> SoapAnimation()
-            "Scrolling Text" -> ScrollingTextAnimation().apply {
-                setText(textInputField.text)
-                setSpeedFactor(textSpeedSlider.value / 100.0)
-            }
-            "SinDots" -> SinDotsAnimation()
-            "Ripple Rainbow" -> RippleRainbowAnimation()
-            "Rain" -> RainAnimation()
-            "Washing Machine" -> WashingMachineAnimation()
-            "Waverly" -> WaverlyAnimation()
-            else -> {
-                System.err.println("Unknown animation: $selectedAnimation")
-                return
-            }
+        val selectedAnimation = animationComboBox.value ?: run {
+            System.err.println("No animation selected")
+            return
+        }
+        
+        // Create animation using registry
+        val newAnimation: LedAnimation = AnimationRegistry.create(selectedAnimation) ?: run {
+            System.err.println("Unknown animation: $selectedAnimation")
+            return
+        }
+        
+        // Apply animation-specific settings if supported
+        if (newAnimation.supportsMultiMode() && ::candleMultiCheckBox.isInitialized) {
+            newAnimation.setMultiMode(candleMultiCheckBox.isSelected)
+        }
+        if (newAnimation.supportsCatMode() && ::twinkleCheckBox.isInitialized) {
+            newAnimation.setCatMode(twinkleCheckBox.isSelected)
+        }
+        if (newAnimation.supportsTextInput()) {
+            newAnimation.setText(textInputField.text)
+        }
+        if (newAnimation.supportsSpeedFactor()) {
+            newAnimation.setSpeedFactor(textSpeedSlider.value / 100.0)
+        }
+        if (newAnimation.supportsPeakDetect() && ::puddlesPeakCheckBox.isInitialized) {
+            newAnimation.setPeakDetect(puddlesPeakCheckBox.isSelected)
         }
 
         currentAnimation = newAnimation
@@ -538,6 +581,20 @@ class WledSimulatorApp : Application() {
         // Update UI controls based on animation capabilities
         val supportsColor = animation.supportsColor()
         val supportsPalette = animation.supportsPalette()
+        val supportsSpeed = animation.supportsSpeed()
+        
+        // Update speed control visibility immediately
+        speedLabel.isVisible = supportsSpeed
+        speedLabel.isManaged = supportsSpeed
+        speedSlider.isVisible = supportsSpeed
+        speedSlider.isManaged = supportsSpeed
+        
+        // Set initial speed if animation supports it
+        if (supportsSpeed) {
+            val currentSpeed = animation.getSpeed() ?: 128
+            speedSlider.value = 255.0 - currentSpeed  // Invert for slider
+            speedLabel.text = "Speed: $currentSpeed"
+        }
         
         colorPicker.isDisable = !supportsColor
         colorLabel.isDisable = !supportsColor
@@ -559,11 +616,11 @@ class WledSimulatorApp : Application() {
                 } else {
                     // Fallback: use animation-specific default
                     when (selectedAnimation) {
-                        "TwinkleUp" -> intArrayOf(0, 0, 0)  // Black default
-                        "Tetrix" -> intArrayOf(0, 0, 0)  // Black default
+                        "TwinkleUp" -> RgbColor.BLACK
+                        "Tetrix" -> RgbColor.BLACK
                         else -> {
                             val currentColor = colorPicker.value
-                            intArrayOf(
+                            RgbColor(
                                 (currentColor.red * 255).toInt().coerceIn(0, 255),
                                 (currentColor.green * 255).toInt().coerceIn(0, 255),
                                 (currentColor.blue * 255).toInt().coerceIn(0, 255)
@@ -573,8 +630,8 @@ class WledSimulatorApp : Application() {
                 }
             }
             // Update color picker to show the animation's current color
-            colorPicker.value = Color.rgb(colorToUse[0], colorToUse[1], colorToUse[2])
-            animation.setColor(colorToUse[0], colorToUse[1], colorToUse[2])
+            colorPicker.value = Color.rgb(colorToUse.r, colorToUse.g, colorToUse.b)
+            animation.setColor(colorToUse)
             // Store the color state
             animationColorStates[selectedAnimation] = colorToUse
         }
@@ -603,8 +660,6 @@ class WledSimulatorApp : Application() {
         val totalLeds = combinedWidth * combinedHeight
 
         lastRandomSwitchNs = System.nanoTime()
-        debugStartNs = lastRandomSwitchNs
-        gridDebugLogged = false
 
         println("Starting ${currentAnimation?.getName()} animation with $totalLeds LEDs total (${combinedWidth}x$combinedHeight combined grid)")
 
@@ -652,41 +707,12 @@ class WledSimulatorApp : Application() {
                                     localX
                                 }
                                 val localLedIndex = localY * device.width + mappedX
-                                rgbData[localLedIndex * 3] = rgb[0]
-                                rgbData[localLedIndex * 3 + 1] = rgb[1]
-                                rgbData[localLedIndex * 3 + 2] = rgb[2]
+                                rgbData[localLedIndex * 3] = rgb.r
+                                rgbData[localLedIndex * 3 + 1] = rgb.g
+                                rgbData[localLedIndex * 3 + 2] = rgb.b
                             }
                         }
 
-                        if (device.config.name.equals("Grid01", ignoreCase = true) && now - debugStartNs >= 5_000_000_000L && !gridDebugLogged) {
-                            gridDebugLogged = true
-                            val litIndices = mutableListOf<String>()
-                            for (idx in 0 until deviceLeds) {
-                                val r = rgbData[idx * 3]
-                                val g = rgbData[idx * 3 + 1]
-                                val b = rgbData[idx * 3 + 2]
-                                if ((r or g or b) != 0) {
-                                    // Use standard row-major mapping: LED index = y * width + x
-                                    val localX = idx % device.width
-                                    val localY = idx / device.width
-                                    litIndices += "LED[$idx](localX=$localX,localY=$localY)->RGB($r,$g,$b)"
-                                }
-                            }
-                            println("Grid01 rgbData check: Total LEDs=${deviceLeds}, Non-black LEDs=${litIndices.size}")
-                            if (litIndices.isNotEmpty()) {
-                                println("  Lit LEDs: ${litIndices.joinToString()}")
-                            } else {
-                                println("  All LEDs are black (0,0,0)")
-                            }
-                            // Also show raw bytes for LED 19 and neighbors
-                            println("  Raw bytes around LED[19]:")
-                            for (idx in 17..21) {
-                                val r = rgbData[idx * 3]
-                                val g = rgbData[idx * 3 + 1]
-                                val b = rgbData[idx * 3 + 2]
-                                println("    LED[$idx]: bytes[${idx*3}]=$r, bytes[${idx*3+1}]=$g, bytes[${idx*3+2}]=$b")
-                            }
-                        }
                         device.artNetClient.sendRgb(rgbData, deviceLeds)
                     }
 
@@ -704,24 +730,7 @@ class WledSimulatorApp : Application() {
     private fun stopAnimation() {
         running.set(false)
         animationTimer?.stop()
-        when (val animation = currentAnimation) {
-            is BlurzAnimation -> animation.cleanup()
-            is GeqAnimation -> animation.cleanup()
-            is DjLightAnimation -> animation.cleanup()
-            is SwirlAnimation -> animation.cleanup()
-            is AkemiAnimation -> animation.cleanup()
-            is WavingCellAnimation -> animation.cleanup()
-            is TartanAnimation -> animation.cleanup()
-            is TetrixAnimation -> animation.cleanup()
-            is WaverlyAnimation -> animation.cleanup()
-            is SunRadiationAnimation -> animation.cleanup()
-            is SquareSwirlAnimation -> animation.cleanup()
-            is SoapAnimation -> animation.cleanup()
-            is SinDotsAnimation -> animation.cleanup()
-            is RippleRainbowAnimation -> animation.cleanup()
-            is RainAnimation -> animation.cleanup()
-            is ScrollingTextAnimation -> animation.cleanup()
-        }
+        currentAnimation?.cleanup()
     }
 
     private fun drawCombinedSimulation() {
@@ -737,7 +746,7 @@ class WledSimulatorApp : Application() {
         for (globalY in 0 until combinedHeight) {
             for (globalX in 0 until combinedWidth) {
                 val rgb = applyBrightness(animation.getPixelColor(globalX, globalY))
-                val color = Color.rgb(rgb[0], rgb[1], rgb[2])
+                val color = Color.rgb(rgb.r, rgb.g, rgb.b)
                 val pixelX = globalX * spacing + startX
                 val pixelY = globalY * spacing + startY
                 gc.fill = color
@@ -753,13 +762,14 @@ class WledSimulatorApp : Application() {
         gc.strokeLine(0.0, lineY, canvas.width, lineY)
     }
 
-    private fun applyBrightness(rgb: IntArray): IntArray {
+    private fun applyBrightness(rgb: RgbColor): RgbColor {
         if (brightnessScale >= 0.999) return rgb
         val scale = brightnessScale.coerceIn(0.0, 1.0)
-        val r = (rgb[0] * scale).roundToInt().coerceIn(0, 255)
-        val g = (rgb[1] * scale).roundToInt().coerceIn(0, 255)
-        val b = (rgb[2] * scale).roundToInt().coerceIn(0, 255)
-        return intArrayOf(r, g, b)
+        return RgbColor(
+            (rgb.r * scale).roundToInt().coerceIn(0, 255),
+            (rgb.g * scale).roundToInt().coerceIn(0, 255),
+            (rgb.b * scale).roundToInt().coerceIn(0, 255)
+        )
     }
 
     private fun sendBlackFrame(connection: DeviceConnection) {
@@ -773,23 +783,56 @@ class WledSimulatorApp : Application() {
     }
 
     private fun updateAnimationControls(animationName: String) {
-        val isScrollingText = animationName == "Scrolling Text"
-        textInputLabel.isVisible = isScrollingText
-        textInputField.isVisible = isScrollingText
-        textInputLabel.isManaged = isScrollingText
-        textInputField.isManaged = isScrollingText
-        textSpeedLabel.isVisible = isScrollingText
-        textSpeedLabel.isManaged = isScrollingText
-        textSpeedSlider.isVisible = isScrollingText
-        textSpeedSlider.isManaged = isScrollingText
+        // Check if current animation supports these features, or create a temporary instance to check
+        val animation = currentAnimation
+        val tempAnimation = if (animation != null && animation.getName() == animationName) {
+            animation
+        } else {
+            // Create temporary instance to check capabilities
+            AnimationRegistry.create(animationName)
+        }
         
-        val isCandle = animationName == "Candle"
-        candleMultiCheckBox.isVisible = isCandle
-        candleMultiCheckBox.isManaged = isCandle
+        val supportsTextInput = tempAnimation?.supportsTextInput() ?: false
+        val supportsSpeedFactor = tempAnimation?.supportsSpeedFactor() ?: false
+        val supportsMultiMode = tempAnimation?.supportsMultiMode() ?: false
+        val supportsCatMode = tempAnimation?.supportsCatMode() ?: false
+        val supportsPeakDetect = tempAnimation?.supportsPeakDetect() ?: false
         
-        val isTwinkleFox = animationName == "TwinkleFox"
-        twinkleCheckBox.isVisible = isTwinkleFox
-        twinkleCheckBox.isManaged = isTwinkleFox
+        textInputLabel.isVisible = supportsTextInput
+        textInputField.isVisible = supportsTextInput
+        textInputLabel.isManaged = supportsTextInput
+        textInputField.isManaged = supportsTextInput
+        textSpeedLabel.isVisible = supportsSpeedFactor
+        textSpeedLabel.isManaged = supportsSpeedFactor
+        textSpeedSlider.isVisible = supportsSpeedFactor
+        textSpeedSlider.isManaged = supportsSpeedFactor
+        
+        candleMultiCheckBox.isVisible = supportsMultiMode
+        candleMultiCheckBox.isManaged = supportsMultiMode
+        
+        twinkleCheckBox.isVisible = supportsCatMode
+        twinkleCheckBox.isManaged = supportsCatMode
+        
+        puddlesPeakCheckBox.isVisible = supportsPeakDetect
+        puddlesPeakCheckBox.isManaged = supportsPeakDetect
+        
+        // Check if animation supports speed (self-identified by animation)
+        val supportsSpeed = currentAnimation?.supportsSpeed() ?: false
+        speedLabel.isVisible = supportsSpeed
+        speedLabel.isManaged = supportsSpeed
+        speedSlider.isVisible = supportsSpeed
+        speedSlider.isManaged = supportsSpeed
+        
+        // Set initial speed value if animation supports it
+        if (supportsSpeed) {
+            val anim = currentAnimation
+            if (anim != null) {
+                val currentSpeed = anim.getSpeed() ?: 128
+                // Invert for slider (255 at top = 0.0, 0 at bottom = 255.0)
+                speedSlider.value = 255.0 - currentSpeed
+                speedLabel.text = "Speed: $currentSpeed"
+            }
+        }
         
         // Always update palette combo box to show the correct state for the selected animation
         // This ensures the UI reflects the correct state even when switching animations
@@ -804,11 +847,11 @@ class WledSimulatorApp : Application() {
         
         // Update color and palette controls based on current animation (if it exists)
         // If animation doesn't exist yet, controls will be updated when animation starts
-        val animation = currentAnimation
+        val currentAnim = currentAnimation
         // Only update if the current animation matches the selected animation name
-        if (animation != null && animation.getName() == animationName) {
-            val supportsColor = animation.supportsColor()
-            val supportsPalette = animation.supportsPalette()
+        if (currentAnim != null && currentAnim.getName() == animationName) {
+            val supportsColor = currentAnim.supportsColor()
+            val supportsPalette = currentAnim.supportsPalette()
             
             colorPicker.isDisable = !supportsColor
             colorLabel.isDisable = !supportsColor
@@ -825,17 +868,17 @@ class WledSimulatorApp : Application() {
                     storedColor
                 } else {
                     // First time - get the animation's current color (its default)
-                    val animColor = animation.getColor()
+                    val animColor = currentAnim.getColor()
                     if (animColor != null) {
                         animColor
                     } else {
                         // Fallback: use animation-specific default
                         when (animationName) {
-                            "TwinkleUp" -> intArrayOf(0, 0, 0)  // Black default
-                            "Tetrix" -> intArrayOf(0, 0, 0)  // Black default
+                            "TwinkleUp" -> RgbColor.BLACK
+                            "Tetrix" -> RgbColor.BLACK
                             else -> {
                                 val currentColor = colorPicker.value
-                                intArrayOf(
+                                RgbColor(
                                     (currentColor.red * 255).toInt().coerceIn(0, 255),
                                     (currentColor.green * 255).toInt().coerceIn(0, 255),
                                     (currentColor.blue * 255).toInt().coerceIn(0, 255)
@@ -845,8 +888,8 @@ class WledSimulatorApp : Application() {
                     }
                 }
                 // Update color picker to show the animation's current color
-                colorPicker.value = Color.rgb(colorToUse[0], colorToUse[1], colorToUse[2])
-                animation.setColor(colorToUse[0], colorToUse[1], colorToUse[2])
+                colorPicker.value = Color.rgb(colorToUse.r, colorToUse.g, colorToUse.b)
+                currentAnim.setColor(colorToUse)
                 // Store the color state
                 animationColorStates[animationName] = colorToUse
             }
@@ -859,13 +902,13 @@ class WledSimulatorApp : Application() {
                     storedPaletteName
                 } else {
                     // First time - check if animation has its own default, otherwise use global default
-                    animation.getDefaultPaletteName() ?: Palettes.DEFAULT_PALETTE_NAME
+                    currentAnim.getDefaultPaletteName() ?: Palettes.DEFAULT_PALETTE_NAME
                 }
                 // Update palette combo box to show the animation's current palette
                 paletteComboBox.value = paletteNameToUse
                 val palette = Palettes.get(paletteNameToUse)
                 if (palette != null) {
-                    animation.setPalette(palette)
+                    currentAnim.setPalette(palette)
                     // Store the palette state
                     animationPaletteStates[animationName] = paletteNameToUse
                 }

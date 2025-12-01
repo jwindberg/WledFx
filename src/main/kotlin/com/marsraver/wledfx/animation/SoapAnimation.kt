@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.floor
 import kotlin.math.max
@@ -14,7 +17,7 @@ class SoapAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixels: Array<Array<IntArray>>
+    private lateinit var pixels: Array<Array<RgbColor>>
     private lateinit var noiseBuffer: Array<DoubleArray>
     private lateinit var rowBlend: DoubleArray
     private lateinit var colBlend: DoubleArray
@@ -24,11 +27,22 @@ class SoapAnimation : LedAnimation {
     private var offsetZ: Double = 0.0
     private var scaleX: Double = 1.0
     private var scaleY: Double = 1.0
+    private var currentPalette: Palette? = null
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixels = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixels = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         noiseBuffer = Array(combinedWidth) { DoubleArray(combinedHeight) }
         rowBlend = DoubleArray(combinedHeight)
         colBlend = DoubleArray(combinedWidth)
@@ -92,65 +106,37 @@ class SoapAnimation : LedAnimation {
                 val sat = (200 + (value / 255.0) * 40).roundToInt().coerceIn(0, 255)
                 val bri = (180 + (blended / 255.0) * 75).roundToInt().coerceIn(0, 255)
                 val rgb = hsvToRgb(hue, sat, bri)
-                pixels[x][y][0] = rgb[0]
-                pixels[x][y][1] = rgb[1]
-                pixels[x][y][2] = rgb[2]
+                pixels[x][y] = rgb
             }
         }
 
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixels[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixels[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Soap"
 
-    fun cleanup() {
+    override fun cleanup() {
         // Nothing to dispose.
     }
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = value / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            return ColorUtils.hsvToRgb(hue, saturation, value)
         }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255),
-        )
     }
 
     private fun perlinNoise(x: Double, y: Double, z: Double): Double {

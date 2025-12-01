@@ -1,4 +1,6 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
 
 import kotlin.math.abs
 import kotlin.math.floor
@@ -12,17 +14,17 @@ class SunRadiationAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixelColors: Array<IntArray>
+    private lateinit var pixelColors: Array<RgbColor>
     private lateinit var bump: IntArray
     private lateinit var bumpTemp: IntArray
-    private var lut = Array(256) { intArrayOf(0, 0, 0) }
+    private var lut = Array(256) { RgbColor.BLACK }
     private var lutGenerated = false
     private var lastUpdateNanos: Long = 0L
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth * combinedHeight) { intArrayOf(0, 0, 0) }
+        pixelColors = Array(combinedWidth * combinedHeight) { RgbColor.BLACK }
         bump = IntArray((combinedWidth + 2) * (combinedHeight + 2))
         bumpTemp = IntArray(bump.size)
         lutGenerated = false
@@ -44,17 +46,17 @@ class SunRadiationAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x + y * combinedWidth].clone()
+            pixelColors[x + y * combinedWidth]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Sun Radiation"
 
-    fun cleanup() {
+    override fun cleanup() {
         // No external resources to release.
     }
 
@@ -98,9 +100,7 @@ class SunRadiationAnimation : LedAnimation {
                 if (col < 0) col = 0
                 val color = lut[col.coerceIn(0, 255)]
                 val idx = x + y * combinedWidth
-                pixelColors[idx][0] = color[0]
-                pixelColors[idx][1] = color[1]
-                pixelColors[idx][2] = color[2]
+                pixelColors[idx] = color
             }
             yIndex += extendedWidth
         }
@@ -131,7 +131,7 @@ class SunRadiationAnimation : LedAnimation {
         }
     }
 
-    private fun heatColor(temperature: Int): IntArray {
+    private fun heatColor(temperature: Int): RgbColor {
         val t = temperature.coerceIn(0, 255)
         val t192 = (t * 191) / 255
 
@@ -157,7 +157,7 @@ class SunRadiationAnimation : LedAnimation {
                 b = 0
             }
         }
-        return intArrayOf(r, g, b)
+        return RgbColor(r, g, b)
     }
 
     private fun perlinNoise(x: Double, y: Double, z: Double): Double {

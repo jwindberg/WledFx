@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.PI
 import kotlin.math.sin
@@ -13,7 +15,7 @@ class TwinkleFoxAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var currentPalette: Palette? = null
-    private var currentColor: IntArray = intArrayOf(0, 0, 0) // SEGCOLOR(1) - background
+    private var currentColor: RgbColor = RgbColor.BLACK // SEGCOLOR(1) - background
     private var intensity: Int = 128  // Controls twinkle density (0-255, default ~160 = 5)
     private var speed: Int = 128     // Speed control (0-255)
     private var cool: Boolean = true // check1 - cooling effect (fade toward red)
@@ -22,7 +24,9 @@ class TwinkleFoxAnimation : LedAnimation {
     private var startTimeNs: Long = 0L
     private var aux0: Int = 22  // Speed parameter (calculated from speed)
     
-    fun setCatMode(enabled: Boolean) {
+    override fun supportsCatMode(): Boolean = true
+
+    override fun setCatMode(enabled: Boolean) {
         cat = enabled
     }
 
@@ -38,12 +42,12 @@ class TwinkleFoxAnimation : LedAnimation {
 
     override fun supportsColor(): Boolean = true
 
-    override fun setColor(r: Int, g: Int, b: Int) {
-        currentColor = intArrayOf(r, g, b)
+    override fun setColor(color: RgbColor) {
+        currentColor = color
     }
 
-    override fun getColor(): IntArray {
-        return currentColor.clone()
+    override fun getColor(): RgbColor? {
+        return currentColor
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -61,10 +65,10 @@ class TwinkleFoxAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette == null || currentPalette.isEmpty()) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
 
         val segmentLength = combinedWidth * combinedHeight
@@ -123,6 +127,16 @@ class TwinkleFoxAnimation : LedAnimation {
 
     override fun getName(): String = "TwinkleFox"
 
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
+
     private fun updateSpeed() {
         // Calculate speed parameter
         aux0 = if (speed > 100) {
@@ -132,7 +146,7 @@ class TwinkleFoxAnimation : LedAnimation {
         }
     }
 
-    private fun twinklefoxOneTwinkle(ms: Long, salt: Int, cat: Boolean): IntArray {
+    private fun twinklefoxOneTwinkle(ms: Long, salt: Int, cat: Boolean): RgbColor {
         // Overall twinkle speed
         val ticks = (ms / aux0).toInt()
         val fastcycle8 = (ticks and 0xFF)
@@ -164,85 +178,66 @@ class TwinkleFoxAnimation : LedAnimation {
         }
         
         val hue = (slowcycle8 - salt + 256) % 256
-        val c = if (bright > 0) {
+        return if (bright > 0) {
             val color = getColorFromPalette(hue, bright)
             
             // Cooling effect: fade toward red as dimming (applied when cool checkbox is NOT checked)
             if (!cool && fastcycle8 >= 128) {
                 val cooling = (fastcycle8 - 128) shr 4
-                val newG = qsub8(color[1], cooling)
-                val newB = qsub8(color[2], cooling * 2)
-                intArrayOf(color[0], newG, newB)
+                RgbColor(
+                    color.r,
+                    qsub8(color.g, cooling),
+                    qsub8(color.b, cooling * 2)
+                )
             } else {
                 color
             }
         } else {
-            intArrayOf(0, 0, 0)  // Black
+            RgbColor.BLACK
         }
-        
-        return c
     }
 
-    private fun getBackgroundColor(): IntArray {
-        val bg = currentColor.clone()
+    private fun getBackgroundColor(): RgbColor {
+        val bg = currentColor
         val bgLight = getAverageLight(bg)
         
         // Scale background brightness
-        when {
+        return when {
             bgLight > 64 -> {
                 // Very bright, scale to 1/16th
-                bg[0] = (bg[0] / 16).coerceIn(0, 255)
-                bg[1] = (bg[1] / 16).coerceIn(0, 255)
-                bg[2] = (bg[2] / 16).coerceIn(0, 255)
+                ColorUtils.scaleBrightness(bg, 1.0 / 16.0)
             }
             bgLight > 16 -> {
                 // Not that bright, scale to 1/4th
-                bg[0] = (bg[0] / 4).coerceIn(0, 255)
-                bg[1] = (bg[1] / 4).coerceIn(0, 255)
-                bg[2] = (bg[2] / 4).coerceIn(0, 255)
+                ColorUtils.scaleBrightness(bg, 1.0 / 4.0)
             }
             else -> {
                 // Dim, scale to 1/3rd
-                bg[0] = (bg[0] * 86 / 255).coerceIn(0, 255)
-                bg[1] = (bg[1] * 86 / 255).coerceIn(0, 255)
-                bg[2] = (bg[2] * 86 / 255).coerceIn(0, 255)
+                ColorUtils.scaleBrightness(bg, 86.0 / 255.0)
             }
         }
-        
-        return bg
     }
 
-    private fun getColorFromPalette(hue: Int, brightness: Int): IntArray {
+    private fun getColorFromPalette(hue: Int, brightness: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             val paletteIdx = (hue % currentPalette.size).coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIdx]
             // Apply brightness
             val brightFactor = brightness / 255.0
-            return intArrayOf(
-                (baseColor[0] * brightFactor).toInt().coerceIn(0, 255),
-                (baseColor[1] * brightFactor).toInt().coerceIn(0, 255),
-                (baseColor[2] * brightFactor).toInt().coerceIn(0, 255)
-            )
+            return ColorUtils.scaleBrightness(baseColor, brightFactor)
         } else {
             // Default rainbow
-            val hsv = hsvToRgb(hue, 255, brightness)
-            return hsv
+            return ColorUtils.hsvToRgb(hue, 255, brightness)
         }
     }
 
-    private fun getAverageLight(color: IntArray): Int {
-        return (color[0] + color[1] + color[2]) / 3
+    private fun getAverageLight(color: RgbColor): Int {
+        return ColorUtils.getAverageLight(color)
     }
 
-    private fun colorBlend(color1: IntArray, color2: IntArray, blendAmount: Int): IntArray {
-        val blend = blendAmount.coerceIn(0, 255) / 255.0
-        val invBlend = 1.0 - blend
-        return intArrayOf(
-            ((color1[0] * invBlend + color2[0] * blend)).toInt().coerceIn(0, 255),
-            ((color1[1] * invBlend + color2[1] * blend)).toInt().coerceIn(0, 255),
-            ((color1[2] * invBlend + color2[2] * blend)).toInt().coerceIn(0, 255)
-        )
+    private fun colorBlend(color1: RgbColor, color2: RgbColor, blendAmount: Int): RgbColor {
+        return ColorUtils.blend(color1, color2, blendAmount)
     }
 
     private fun qsub8(value: Int, subtract: Int): Int {
@@ -250,45 +245,8 @@ class TwinkleFoxAnimation : LedAnimation {
     }
 
     private fun sin8(angle: Int): Int {
-        val normalized = (angle % 256 + 256) % 256
-        val radians = (normalized / 255.0) * 2 * PI
-        val sine = sin(radians)
-        val result = ((sine + 1.0) / 2.0 * 255.0).toInt()
-        return result.coerceIn(0, 255)
+        return ColorUtils.sin8(angle)
     }
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).toInt()
-            return intArrayOf(gray, gray, gray)
-        }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).toInt().coerceIn(0, 255),
-            (g * 255).toInt().coerceIn(0, 255),
-            (b * 255).toInt().coerceIn(0, 255)
-        )
-    }
 }
 

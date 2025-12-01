@@ -1,4 +1,7 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.cos
 import kotlin.math.max
@@ -20,8 +23,19 @@ class DistortionWavesAnimation : LedAnimation {
     private var zoom: Boolean = false
     private var alt: Boolean = false
     private var paletteMode: Int = 0
+    private var currentPalette: Palette? = null
 
     private var startTime: Long = 0
+
+    override fun supportsPalette(): Boolean = true
+
+    override fun setPalette(palette: Palette) {
+        this.currentPalette = palette
+    }
+
+    override fun getPalette(): Palette? {
+        return currentPalette
+    }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -31,9 +45,9 @@ class DistortionWavesAnimation : LedAnimation {
 
     override fun update(now: Long): Boolean = true
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
 
         val timeMs = System.currentTimeMillis() - startTime
@@ -98,19 +112,30 @@ class DistortionWavesAnimation : LedAnimation {
         valueB = cos8(valueB and 255)
 
         return if (paletteMode == 0) {
-            intArrayOf(valueR, valueG, valueB)
+            RgbColor(valueR, valueG, valueB)
         } else {
             val brightness = (valueR + valueG + valueB) / 3
             if (fill) {
                 colorFromPalette(brightness, 255)
             } else {
                 val hsv = rgb2hsv(valueR shr 2, valueG shr 2, valueB shr 2)
-                colorFromPalette(hsv[0], brightness)
+                // hsv is encoded as RgbColor where r=hue, g=saturation, b=value
+                colorFromPalette(hsv.r, brightness)
             }
         }
     }
 
     override fun getName(): String = "Distortion Waves"
+
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
 
     private fun cos8(theta: Int): Int {
         val radians = (theta and 255) / 255.0 * 2 * Math.PI
@@ -125,7 +150,8 @@ class DistortionWavesAnimation : LedAnimation {
         return min + ((sine + 1.0) * range / 2.0).roundToInt()
     }
 
-    private fun rgb2hsv(r: Int, g: Int, b: Int): IntArray {
+    // Returns HSV encoded as RgbColor (r=hue, g=saturation, b=value) for compatibility
+    private fun rgb2hsv(r: Int, g: Int, b: Int): RgbColor {
         val rf = r / 255.0f
         val gf = g / 255.0f
         val bf = b / 255.0f
@@ -145,41 +171,27 @@ class DistortionWavesAnimation : LedAnimation {
         val s = if (max == 0f) 0f else delta / max
         val v = max
 
-        return intArrayOf(
+        return RgbColor(
             (h * 255 / 360).roundToInt().coerceIn(0, 255),
             (s * 255).roundToInt().coerceIn(0, 255),
             (v * 255).roundToInt().coerceIn(0, 255)
         )
     }
 
-    private fun colorFromPalette(hue: Int, brightness: Int): IntArray {
-        val h = (hue % 256) / 255.0f * 360.0f
-        val s = 1.0f
-        val v = brightness / 255.0f
-        return hsvToRgb(h, s, v)
-    }
-
-    private fun hsvToRgb(h: Float, s: Float, v: Float): IntArray {
-        val hi = ((h / 60.0f) % 6).toInt()
-        val f = h / 60.0f - hi
-        val p = v * (1 - s)
-        val q = v * (1 - f * s)
-        val t = v * (1 - (1 - f) * s)
-
-        val (r, g, b) = when (hi) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
+    private fun colorFromPalette(hue: Int, brightness: Int): RgbColor {
+        val currentPalette = this.currentPalette?.colors
+        if (currentPalette != null && currentPalette.isNotEmpty()) {
+            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
+            val baseColor = currentPalette[paletteIndex]
+            val brightnessFactor = brightness / 255.0
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        } else {
+            // Fallback to HSV if no palette is set
+            val h = (hue % 256) / 255.0f * 360.0f
+            val s = 1.0f
+            val v = brightness / 255.0f
+            return ColorUtils.hsvToRgb(h, s, v)
         }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
     }
 }
 

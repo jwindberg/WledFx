@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.*
 
@@ -97,7 +99,7 @@ class AndroidAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val centerX = combinedWidth / 2.0
         val centerY = combinedHeight / 2.0
         
@@ -121,7 +123,7 @@ class AndroidAnimation : LedAnimation {
         // Only draw arc within the circle radius
         if (distance <= maxRadius && isInArc) {
             // Use primary color (white/light color for Android style)
-            return intArrayOf(200, 200, 200)
+            return RgbColor(200, 200, 200)
         } else {
             // Use palette color based on position
             val currentPalette = this.currentPalette?.colors
@@ -138,38 +140,8 @@ class AndroidAnimation : LedAnimation {
 
     override fun getName(): String = "Android"
 
-    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): IntArray {
-        val h = (hue % 256 + 256) % 256
-        val s = saturation.coerceIn(0, 255) / 255.0
-        val v = value.coerceIn(0, 255) / 255.0
-
-        if (s <= 0.0) {
-            val gray = (v * 255).roundToInt()
-            return intArrayOf(gray, gray, gray)
-        }
-
-        val hSection = h / 42.6666667
-        val i = hSection.toInt()
-        val f = hSection - i
-
-        val p = v * (1 - s)
-        val q = v * (1 - s * f)
-        val t = v * (1 - s * (1 - f))
-
-        val (r, g, b) = when (i % 6) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
+    private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
+        return ColorUtils.hsvToRgb(hue, saturation, value)
     }
 }
 

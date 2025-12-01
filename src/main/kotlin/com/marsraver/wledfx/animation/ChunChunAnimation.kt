@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.*
 
@@ -13,8 +15,9 @@ class ChunChunAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var currentPalette: Palette? = null
-    private lateinit var pixelColors: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
     private var startTime: Long = 0L
+    private var speed: Int = 128
 
     override fun supportsPalette(): Boolean = true
 
@@ -30,7 +33,7 @@ class ChunChunAnimation : LedAnimation {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
         val segmentLength = combinedWidth * combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTime = 0L
     }
 
@@ -56,9 +59,10 @@ class ChunChunAnimation : LedAnimation {
         val elapsedNs = now - startTime
         val stripNow = elapsedNs / 1_000_000L // Convert to milliseconds
         
-        // Counter calculation matching original: strip.now * (6 + (speed >> 4))
-        val speed = 20 // Default speed (0-255)
-        var counter = (stripNow * (6 + (speed shr 4))).toLong()
+        // Counter calculation - speed controls how fast birds move
+        // Map speed (0-255) to multiplier (1-16) for more noticeable effect
+        val speedMultiplier = 1 + (speed / 16)  // Maps 0-255 to 1-16 range
+        var counter = (stripNow * speedMultiplier).toLong()
         
         // Number of birds: 2 + 1/8 of segment length
         val numBirds = 2 + (segmentLength shr 3)
@@ -89,22 +93,32 @@ class ChunChunAnimation : LedAnimation {
             
             // Set pixel color
             if (birdY < combinedHeight) {
-                pixelColors[birdX][birdY] = color.clone()
+                pixelColors[birdX][birdY] = color
             }
         }
         
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y].clone()
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "ChunChun"
+
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
 
     /**
      * Fade out pixels for trail effect
@@ -114,9 +128,8 @@ class ChunChunAnimation : LedAnimation {
         val factor = (255 - fadeAmount).coerceIn(0, 255) / 255.0
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = (pixelColors[x][y][0] * factor).toInt().coerceIn(0, 255)
-                pixelColors[x][y][1] = (pixelColors[x][y][1] * factor).toInt().coerceIn(0, 255)
-                pixelColors[x][y][2] = (pixelColors[x][y][2] * factor).toInt().coerceIn(0, 255)
+                val current = pixelColors[x][y]
+                pixelColors[x][y] = ColorUtils.scaleBrightness(current, factor)
             }
         }
     }

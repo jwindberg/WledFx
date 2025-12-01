@@ -1,5 +1,6 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.*
 
@@ -36,10 +37,10 @@ class BpmAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette == null || currentPalette.isEmpty()) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
         
         val timeMs = System.currentTimeMillis()
@@ -59,10 +60,10 @@ class BpmAnimation : LedAnimation {
         val brightnessOffset = (beat - stp + (pixelIndex * 10)) % 256
         val brightnessFactor = brightnessOffset / 255.0
         
-        return intArrayOf(
-            (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
-            (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
-            (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
+        return RgbColor(
+            (baseColor.r * brightnessFactor).toInt().coerceIn(0, 255),
+            (baseColor.g * brightnessFactor).toInt().coerceIn(0, 255),
+            (baseColor.b * brightnessFactor).toInt().coerceIn(0, 255)
         )
     }
 

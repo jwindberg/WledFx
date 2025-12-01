@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.*
 
@@ -13,7 +15,7 @@ class BlendsAnimation : LedAnimation {
     private var combinedHeight: Int = 0
     private var currentPalette: Palette? = null
     
-    private lateinit var pixelColors: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
     private var startTime: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -29,7 +31,7 @@ class BlendsAnimation : LedAnimation {
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTime = 0L
     }
 
@@ -69,11 +71,11 @@ class BlendsAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y].clone()
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
@@ -98,13 +100,13 @@ class BlendsAnimation : LedAnimation {
      * Blend two colors together
      * blendSpeed: higher = faster blend (0-255)
      */
-    private fun colorBlend(color1: IntArray, color2: IntArray, blendSpeed: Int): IntArray {
+    private fun colorBlend(color1: RgbColor, color2: RgbColor, blendSpeed: Int): RgbColor {
         val blendFactor = blendSpeed.coerceIn(0, 255) / 255.0
-        
-        return intArrayOf(
-            ((color1[0] * (1.0 - blendFactor)) + (color2[0] * blendFactor)).toInt().coerceIn(0, 255),
-            ((color1[1] * (1.0 - blendFactor)) + (color2[1] * blendFactor)).toInt().coerceIn(0, 255),
-            ((color1[2] * (1.0 - blendFactor)) + (color2[2] * blendFactor)).toInt().coerceIn(0, 255)
+        val invBlend = 1.0 - blendFactor
+        return RgbColor(
+            ((color1.r * invBlend + color2.r * blendFactor)).toInt().coerceIn(0, 255),
+            ((color1.g * invBlend + color2.g * blendFactor)).toInt().coerceIn(0, 255),
+            ((color1.b * invBlend + color2.b * blendFactor)).toInt().coerceIn(0, 255)
         )
     }
 

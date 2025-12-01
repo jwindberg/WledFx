@@ -1,4 +1,6 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
 
 import java.util.Random
 import kotlin.math.sqrt
@@ -15,16 +17,16 @@ class BouncingBallAnimation : LedAnimation {
     private var velocityX: Double = 0.0
     private var velocityY: Double = 0.0
     private var ballRadius: Int = 2
-    private var currentColor: IntArray = intArrayOf(0, 255, 255)
+    private var currentColor: RgbColor = RgbColor(0, 255, 255)
 
     override fun supportsColor(): Boolean = true
 
-    override fun setColor(r: Int, g: Int, b: Int) {
-        currentColor = intArrayOf(r, g, b)
+    override fun setColor(color: RgbColor) {
+        currentColor = color
     }
 
-    override fun getColor(): IntArray {
-        return currentColor.clone()
+    override fun getColor(): RgbColor? {
+        return currentColor
     }
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
@@ -70,23 +72,19 @@ class BouncingBallAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val dx = x - ballX
         val dy = y - ballY
         val distance = sqrt(dx * dx + dy * dy)
 
         return when {
-            distance <= ballRadius -> currentColor.clone()
+            distance <= ballRadius -> currentColor
             distance <= ballRadius + MAX_TRAIL -> {
                 val trailDistance = distance - ballRadius
                 val factor = (1.0 - trailDistance / MAX_TRAIL).coerceIn(0.0, 1.0)
-                intArrayOf(
-                    (currentColor[0] * factor).toInt().coerceIn(0, 255),
-                    (currentColor[1] * factor).toInt().coerceIn(0, 255),
-                    (currentColor[2] * factor).toInt().coerceIn(0, 255)
-                )
+                ColorUtils.scaleBrightness(currentColor, factor)
             }
-            else -> intArrayOf(0, 0, 0)
+            else -> RgbColor.BLACK
         }
     }
 

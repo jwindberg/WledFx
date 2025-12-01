@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -54,9 +56,9 @@ class WavingCellAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
 
         val level = synchronized(audioLock) { smoothedLevel }.coerceIn(0.0, 255.0)
@@ -71,10 +73,7 @@ class WavingCellAnimation : LedAnimation {
         index = wrapToPaletteRange(index)
         val color = colorFromPalette(index)
         val brightnessScale = (0.6 + level / 255.0 * 0.8).coerceIn(0.6, 1.4)
-        color[0] = (color[0] * brightnessScale).roundToInt().coerceIn(0, 255)
-        color[1] = (color[1] * brightnessScale).roundToInt().coerceIn(0, 255)
-        color[2] = (color[2] * brightnessScale).roundToInt().coerceIn(0, 255)
-        return color
+        return ColorUtils.scaleBrightness(color, brightnessScale)
     }
 
     override fun getName(): String = "Waving Cell"
@@ -89,7 +88,7 @@ class WavingCellAnimation : LedAnimation {
         return currentPalette
     }
 
-    fun cleanup() {
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(audioLock) {
@@ -117,19 +116,19 @@ class WavingCellAnimation : LedAnimation {
         return result
     }
 
-    private fun colorFromPalette(indexValue: Double): IntArray {
+    private fun colorFromPalette(indexValue: Double): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             // Use the selected palette
             val index = (indexValue.coerceIn(0.0, 255.0) / 255.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            return currentPalette[index].clone()
+            return currentPalette[index]
         } else {
             // Fallback to heat palette if no palette is set
             return colorFromHeatPalette(indexValue)
         }
     }
 
-    private fun colorFromHeatPalette(indexValue: Double): IntArray {
+    private fun colorFromHeatPalette(indexValue: Double): RgbColor {
         val index = indexValue.coerceIn(0.0, 255.0)
         var lower = HEAT_PALETTE.first()
         var upper = HEAT_PALETTE.last()
@@ -145,15 +144,15 @@ class WavingCellAnimation : LedAnimation {
         }
 
         if (lower === upper) {
-            return lower.color.clone()
+            return lower.color
         }
 
         val range = upper.position - lower.position
         val fraction = if (range <= 0.0) 0.0 else (index - lower.position) / range
-        val r = lerp(lower.color[0], upper.color[0], fraction)
-        val g = lerp(lower.color[1], upper.color[1], fraction)
-        val b = lerp(lower.color[2], upper.color[2], fraction)
-        return intArrayOf(r, g, b)
+        val r = lerp(lower.color.r, upper.color.r, fraction)
+        val g = lerp(lower.color.g, upper.color.g, fraction)
+        val b = lerp(lower.color.b, upper.color.b, fraction)
+        return RgbColor(r, g, b)
     }
 
     private fun lerp(start: Int, end: Int, fraction: Double): Int {
@@ -161,16 +160,16 @@ class WavingCellAnimation : LedAnimation {
         return value.roundToInt().coerceIn(0, 255)
     }
 
-    private data class PaletteEntry(val position: Double, val color: IntArray)
+    private data class PaletteEntry(val position: Double, val color: RgbColor)
 
     companion object {
         private val HEAT_PALETTE = listOf(
-            PaletteEntry(0.0, intArrayOf(0, 0, 0)),
-            PaletteEntry(48.0, intArrayOf(48, 0, 0)),
-            PaletteEntry(96.0, intArrayOf(128, 16, 0)),
-            PaletteEntry(160.0, intArrayOf(255, 80, 0)),
-            PaletteEntry(224.0, intArrayOf(255, 200, 0)),
-            PaletteEntry(255.0, intArrayOf(255, 255, 255)),
+            PaletteEntry(0.0, RgbColor.BLACK),
+            PaletteEntry(48.0, RgbColor(48, 0, 0)),
+            PaletteEntry(96.0, RgbColor(128, 16, 0)),
+            PaletteEntry(160.0, RgbColor(255, 80, 0)),
+            PaletteEntry(224.0, RgbColor(255, 200, 0)),
+            PaletteEntry(255.0, RgbColor.WHITE),
         )
     }
 }

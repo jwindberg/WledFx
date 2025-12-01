@@ -1,6 +1,7 @@
 package com.marsraver.wledfx.animation
 
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.Palette
 import javafx.scene.canvas.GraphicsContext
 import javafx.scene.paint.Color
 
@@ -30,9 +31,9 @@ interface LedAnimation {
      *
      * @param x X coordinate in the combined grid (0 to combinedWidth-1)
      * @param y Y coordinate in the combined grid (0 to combinedHeight-1)
-     * @return RGB color values as [R, G, B] each in range 0-255
+     * @return RGB color
      */
-    fun getPixelColor(x: Int, y: Int): IntArray
+    fun getPixelColor(x: Int, y: Int): RgbColor
 
     /**
      * Get the name of the animation for display in UI.
@@ -58,20 +59,18 @@ interface LedAnimation {
     /**
      * Set the primary color for the animation (if supported).
      *
-     * @param r red component (0-255)
-     * @param g green component (0-255)
-     * @param b blue component (0-255)
+     * @param color RGB color
      */
-    fun setColor(r: Int, g: Int, b: Int) {
+    fun setColor(color: RgbColor) {
         // Default implementation does nothing
     }
 
     /**
      * Get the current color of the animation (if supported).
      *
-     * @return RGB color values as [R, G, B] each in range 0-255, or null if not supported
+     * @return RGB color, or null if not supported
      */
-    fun getColor(): IntArray? {
+    fun getColor(): RgbColor? {
         // Default implementation returns null
         return null
     }
@@ -107,6 +106,33 @@ interface LedAnimation {
     }
 
     /**
+     * Check if this animation supports speed control.
+     *
+     * @return true if the animation has a speed parameter
+     */
+    fun supportsSpeed(): Boolean = false
+
+    /**
+     * Set the speed for the animation (if supported).
+     * Speed range is 0-255, where higher values typically mean faster.
+     *
+     * @param speed speed value (0-255)
+     */
+    fun setSpeed(speed: Int) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Get the current speed of the animation (if supported).
+     *
+     * @return speed value (0-255), or null if not supported
+     */
+    fun getSpeed(): Int? {
+        // Default implementation returns null
+        return null
+    }
+
+    /**
      * Draw the animation on the canvas (optional, for custom rendering).
      *
      * @param gc graphics context for drawing
@@ -126,10 +152,99 @@ interface LedAnimation {
                 val pixelX = x * spacing + startX
                 val pixelY = y * spacing + startY
 
-                gc.fill = Color.rgb(rgb[0], rgb[1], rgb[2])
+                gc.fill = Color.rgb(rgb.r, rgb.g, rgb.b)
                 gc.fillOval(pixelX - radius, pixelY - radius, radius * 2, radius * 2)
             }
         }
+    }
+
+    /**
+     * Clean up resources when the animation is stopped.
+     * Default implementation does nothing. Override to cancel coroutines,
+     * close resources, or perform other cleanup tasks.
+     */
+    fun cleanup() {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Check if this animation supports multi-mode (e.g., multiple candles).
+     *
+     * @return true if the animation supports multi-mode
+     */
+    fun supportsMultiMode(): Boolean = false
+
+    /**
+     * Set multi-mode for the animation (if supported).
+     *
+     * @param enabled true to enable multi-mode, false to disable
+     */
+    fun setMultiMode(enabled: Boolean) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Check if this animation supports cat mode (e.g., TwinkleFox).
+     *
+     * @return true if the animation supports cat mode
+     */
+    fun supportsCatMode(): Boolean = false
+
+    /**
+     * Set cat mode for the animation (if supported).
+     *
+     * @param enabled true to enable cat mode, false to disable
+     */
+    fun setCatMode(enabled: Boolean) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Check if this animation supports text input (e.g., ScrollingText).
+     *
+     * @return true if the animation supports text input
+     */
+    fun supportsTextInput(): Boolean = false
+
+    /**
+     * Set the text for the animation (if supported).
+     *
+     * @param text the text to display
+     */
+    fun setText(text: String?) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Check if this animation supports speed factor (e.g., ScrollingText).
+     *
+     * @return true if the animation supports speed factor
+     */
+    fun supportsSpeedFactor(): Boolean = false
+
+    /**
+     * Set the speed factor for the animation (if supported).
+     *
+     * @param factor speed factor (typically 0.0 to 1.0)
+     */
+    fun setSpeedFactor(factor: Double) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Check if this animation supports peak detection (e.g., Puddles).
+     *
+     * @return true if the animation supports peak detection
+     */
+    fun supportsPeakDetect(): Boolean = false
+
+    /**
+     * Set peak detection for the animation (if supported).
+     *
+     * @param enabled true to enable peak detection, false to disable
+     */
+    fun setPeakDetect(enabled: Boolean) {
+        // Default implementation does nothing
     }
 }
 

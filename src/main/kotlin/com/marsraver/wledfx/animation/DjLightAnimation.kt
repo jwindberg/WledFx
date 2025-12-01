@@ -1,4 +1,6 @@
 package com.marsraver.wledfx.animation
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +19,7 @@ class DjLightAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private lateinit var pixelColors: Array<Array<IntArray>>
+    private lateinit var pixelColors: Array<Array<RgbColor>>
     private var startTime: Long = 0L
     private var callCount: Long = 0
 
@@ -37,7 +39,7 @@ class DjLightAnimation : LedAnimation {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
         val segmentLength = combinedWidth * combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTime = 0L
         callCount = 0
         secondHand = 0
@@ -49,7 +51,7 @@ class DjLightAnimation : LedAnimation {
         // Fill with black on first call (matching original: if (SEGENV.call == 0))
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y] = intArrayOf(0, 0, 0)
+                pixelColors[x][y] = RgbColor.BLACK
             }
         }
         
@@ -164,7 +166,7 @@ class DjLightAnimation : LedAnimation {
             val midX = mid % combinedWidth
             val midY = mid / combinedWidth
             if (midY < combinedHeight) {
-                pixelColors[midX][midY] = intArrayOf(fadedR, fadedG, fadedB)
+                pixelColors[midX][midY] = RgbColor(fadedR, fadedG, fadedB)
             }
             
             // Shift pixels outward to stream the center pixel
@@ -177,7 +179,7 @@ class DjLightAnimation : LedAnimation {
                 val toY = i / combinedWidth
                 
                 if (fromY < combinedHeight && toY < combinedHeight) {
-                    pixelColors[toX][toY] = pixelColors[fromX][fromY].clone()
+                    pixelColors[toX][toY] = pixelColors[fromX][fromY]
                 }
             }
             
@@ -190,7 +192,7 @@ class DjLightAnimation : LedAnimation {
                 val toY = i / combinedWidth
                 
                 if (fromY < combinedHeight && toY < combinedHeight) {
-                    pixelColors[toX][toY] = pixelColors[fromX][fromY].clone()
+                    pixelColors[toX][toY] = pixelColors[fromX][fromY]
                 }
             }
         }
@@ -198,17 +200,17 @@ class DjLightAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y].clone()
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "DJLight"
     
-    fun cleanup() {
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(spectrumLock) {

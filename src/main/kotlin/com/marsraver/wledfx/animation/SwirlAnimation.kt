@@ -1,5 +1,7 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.ColorUtils
+import com.marsraver.wledfx.color.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +20,7 @@ class SwirlAnimation : LedAnimation {
 
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<IntArray>> = emptyArray()
+    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
     private var currentPalette: Palette? = null
 
     private var speed: Int = 128
@@ -47,7 +49,7 @@ class SwirlAnimation : LedAnimation {
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         synchronized(volumeLock) {
             volumeSmth = 0.0f
             volumeRaw = 0
@@ -118,21 +120,27 @@ class SwirlAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            val color = pixelColors[x][y].clone()
-            color[0] = color[0].coerceIn(0, 255)
-            color[1] = color[1].coerceIn(0, 255)
-            color[2] = color[2].coerceIn(0, 255)
-            color
+            pixelColors[x][y]
         } else {
-            intArrayOf(0, 0, 0)
+            RgbColor.BLACK
         }
     }
 
     override fun getName(): String = "Swirl"
 
-    fun cleanup() {
+    override fun supportsSpeed(): Boolean = true
+
+    override fun setSpeed(speed: Int) {
+        this.speed = speed.coerceIn(0, 255)
+    }
+
+    override fun getSpeed(): Int? {
+        return speed
+    }
+
+    override fun cleanup() {
         audioScope?.cancel()
         audioScope = null
         synchronized(volumeLock) {
@@ -155,19 +163,15 @@ class SwirlAnimation : LedAnimation {
             amount >= 255 -> {
                 for (x in 0 until combinedWidth) {
                     for (y in 0 until combinedHeight) {
-                        pixelColors[x][y][0] = 0
-                        pixelColors[x][y][1] = 0
-                        pixelColors[x][y][2] = 0
+                        pixelColors[x][y] = RgbColor.BLACK
                     }
                 }
             }
             else -> {
-                val factor = 255 - amount
+                val factor = (255 - amount) / 255.0
                 for (x in 0 until combinedWidth) {
                     for (y in 0 until combinedHeight) {
-                        pixelColors[x][y][0] = pixelColors[x][y][0] * factor / 255
-                        pixelColors[x][y][1] = pixelColors[x][y][1] * factor / 255
-                        pixelColors[x][y][2] = pixelColors[x][y][2] * factor / 255
+                        pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
                     }
                 }
             }
@@ -176,46 +180,56 @@ class SwirlAnimation : LedAnimation {
 
     private fun applyBlur(amount: Int) {
         if (amount <= 0) return
-        val temp = Array(combinedWidth) { Array(combinedHeight) { IntArray(3) } }
+        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                for (c in 0 until 3) {
-                    var sum = 0
-                    var count = 0
-                    for (dx in -1..1) {
-                        for (dy in -1..1) {
-                            val nx = x + dx
-                            val ny = y + dy
-                            if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
-                                sum += pixelColors[nx][ny][c]
-                                count++
-                            }
+                var sumR = 0
+                var sumG = 0
+                var sumB = 0
+                var count = 0
+                for (dx in -1..1) {
+                    for (dy in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                            val color = pixelColors[nx][ny]
+                            sumR += color.r
+                            sumG += color.g
+                            sumB += color.b
+                            count++
                         }
                     }
-                    val avg = if (count > 0) sum / count else pixelColors[x][y][c]
-                    val original = pixelColors[x][y][c]
-                    temp[x][y][c] = (original * (255 - amount) + avg * amount) / 255
                 }
+                val current = pixelColors[x][y]
+                val avgR = if (count > 0) sumR / count else current.r
+                val avgG = if (count > 0) sumG / count else current.g
+                val avgB = if (count > 0) sumB / count else current.b
+                temp[x][y] = RgbColor(
+                    (current.r * (255 - amount) + avgR * amount) / 255,
+                    (current.g * (255 - amount) + avgG * amount) / 255,
+                    (current.b * (255 - amount) + avgB * amount) / 255
+                )
             }
         }
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
-                pixelColors[x][y][0] = temp[x][y][0]
-                pixelColors[x][y][1] = temp[x][y][1]
-                pixelColors[x][y][2] = temp[x][y][2]
+                pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
-    private fun addPixelColor(x: Int, y: Int, rgb: IntArray) {
+    private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y][0] = (pixelColors[x][y][0] + rgb[0]).coerceAtMost(255)
-            pixelColors[x][y][1] = (pixelColors[x][y][1] + rgb[1]).coerceAtMost(255)
-            pixelColors[x][y][2] = (pixelColors[x][y][2] + rgb[2]).coerceAtMost(255)
+            val current = pixelColors[x][y]
+            pixelColors[x][y] = RgbColor(
+                (current.r + rgb.r).coerceAtMost(255),
+                (current.g + rgb.g).coerceAtMost(255),
+                (current.b + rgb.b).coerceAtMost(255)
+            )
         }
     }
 
-    private fun colorFromPalette(colorIndexValue: Int, brightness: Int): IntArray {
+    private fun colorFromPalette(colorIndexValue: Int, brightness: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette != null && currentPalette.isNotEmpty()) {
             var colorIndex = colorIndexValue % 256
@@ -223,42 +237,15 @@ class SwirlAnimation : LedAnimation {
             val paletteIndex = (colorIndex / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
             val baseColor = currentPalette[paletteIndex]
             val brightnessFactor = brightness / 255.0
-            return intArrayOf(
-                (baseColor[0] * brightnessFactor).toInt().coerceIn(0, 255),
-                (baseColor[1] * brightnessFactor).toInt().coerceIn(0, 255),
-                (baseColor[2] * brightnessFactor).toInt().coerceIn(0, 255)
-            )
+            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
         } else {
             var colorIndex = colorIndexValue % 256
             if (colorIndex < 0) colorIndex += 256
             val h = colorIndex / 255.0f * 360.0f
             val s = 1.0f
             val v = brightness / 255.0f
-            return hsvToRgb(h, s, v)
+            return ColorUtils.hsvToRgb(h, s, v)
         }
-    }
-
-    private fun hsvToRgb(h: Float, s: Float, v: Float): IntArray {
-        val hi = ((h / 60f) % 6).toInt()
-        val f = h / 60f - hi
-        val p = v * (1 - s)
-        val q = v * (1 - f * s)
-        val t = v * (1 - (1 - f) * s)
-
-        val (r, g, b) = when (hi) {
-            0 -> Triple(v, t, p)
-            1 -> Triple(q, v, p)
-            2 -> Triple(p, v, t)
-            3 -> Triple(p, q, v)
-            4 -> Triple(t, p, v)
-            else -> Triple(v, p, q)
-        }
-
-        return intArrayOf(
-            (r * 255).roundToInt().coerceIn(0, 255),
-            (g * 255).roundToInt().coerceIn(0, 255),
-            (b * 255).roundToInt().coerceIn(0, 255)
-        )
     }
 
     companion object {

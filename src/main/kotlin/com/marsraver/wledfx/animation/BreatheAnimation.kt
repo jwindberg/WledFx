@@ -1,5 +1,6 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.palette.Palette
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.color.Palette
 
 import kotlin.math.*
 
@@ -37,10 +38,10 @@ class BreatheAnimation : LedAnimation {
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): IntArray {
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
         val currentPalette = this.currentPalette?.colors
         if (currentPalette == null || currentPalette.isEmpty()) {
-            return intArrayOf(0, 0, 0)
+            return RgbColor.BLACK
         }
         
         val speed = 128 // Default speed (0-255)
@@ -67,15 +68,12 @@ class BreatheAnimation : LedAnimation {
         val paletteIndex = (pixelIndex % currentPalette.size).coerceIn(0, currentPalette.size - 1)
         val paletteColor = currentPalette[paletteIndex]
         
-        // Blend with secondary color (default to black/off)
-        val secondaryColor = intArrayOf(0, 0, 0)
-        
         // Apply luminance to palette color
         val brightness = lum.coerceIn(0, 255) / 255.0
-        return intArrayOf(
-            (paletteColor[0] * brightness).toInt().coerceIn(0, 255),
-            (paletteColor[1] * brightness).toInt().coerceIn(0, 255),
-            (paletteColor[2] * brightness).toInt().coerceIn(0, 255)
+        return RgbColor(
+            (paletteColor.r * brightness).toInt().coerceIn(0, 255),
+            (paletteColor.g * brightness).toInt().coerceIn(0, 255),
+            (paletteColor.b * brightness).toInt().coerceIn(0, 255)
         )
     }
 
