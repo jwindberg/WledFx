@@ -6,7 +6,7 @@ import com.marsraver.wledfx.color.Palette
 import com.marsraver.wledfx.audio.LoudnessMeter
 
 /**
- * Gravcenter animation - Audio-reactive bars expanding from center with gravity effect
+ * GravCenter animation - Audio-reactive bars expanding from center with gravity effect
  * By: Andrew Tuline
  */
 class GravCenterAnimation : LedAnimation {
