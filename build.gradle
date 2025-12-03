@@ -106,6 +106,22 @@ tasks.register('scanWled', JavaExec) {
     mainClass = 'com.marsraver.wledfx.wled.WledNetworkScanner'
 }
 
+// Add task for running WLED client demo
+tasks.register('runDemo', JavaExec) {
+    group = 'application'
+    description = 'Runs the WLED client demo (red dot animation on Grid00)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.marsraver.wledfx.WledClientDemo'
+}
+
+// Add task for printing audio volume
+tasks.register('printVolume', JavaExec) {
+    group = 'application'
+    description = 'Prints audio volume every second for 10 seconds'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.marsraver.wledfx.audio.VolumePrinter'
+}
+
 tasks.named('test') {
     useJUnitPlatform()
 }

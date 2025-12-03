@@ -2,14 +2,8 @@ package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
+import com.marsraver.wledfx.audio.LoudnessMeter
 import java.util.Random
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -48,12 +42,7 @@ class BlurzAnimation : LedAnimation {
     private var audioIndex: Int = 0
     private var lastFadeTime: Long = 0
 
-    @Volatile
-    private var currentSoundLevel: Int = 0
-    private var soundLevelWindow: IntArray = IntArray(WINDOW_SIZE)
-    private var soundLevelIndex: Int = 0
-    private val soundLevelLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -62,21 +51,8 @@ class BlurzAnimation : LedAnimation {
         pixelHue = Array(combinedWidth) { ByteArray(combinedHeight) }
         lastPixelTime = 0
         lastFadeTime = 0
-        soundLevelWindow = IntArray(WINDOW_SIZE)
-        soundLevelIndex = 0
-
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(soundLevelLock) {
-                        currentSoundLevel = level.level
-                        soundLevelWindow[soundLevelIndex] = currentSoundLevel
-                        soundLevelIndex = (soundLevelIndex + 1) % WINDOW_SIZE
-                    }
-                }
-            }
-        }
+        
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
@@ -94,13 +70,13 @@ class BlurzAnimation : LedAnimation {
         }
 
         if (now - lastPixelTime > pixelInterval) {
-            val (levelSnapshot, windowSnapshot) = synchronized(soundLevelLock) {
-                currentSoundLevel to soundLevelWindow.clone()
-            }
-            val sortedWindow = windowSnapshot.sortedArray()
-            val percentileIndex = (WINDOW_SIZE * 0.75).roundToInt().coerceAtMost(WINDOW_SIZE - 1)
-            val threshold = sortedWindow[percentileIndex]
-
+            // Get loudness (0-1024) and convert to 0-255 range
+            val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+            val levelSnapshot = (loudness / 1024.0f * 255.0f).toInt().coerceIn(0, 255)
+            
+            // Use a simple threshold - LoudnessMeter already provides normalized values
+            val threshold = 50  // Simple threshold for triggering pixels
+            
             if (levelSnapshot < threshold) {
                 return true
             }
@@ -192,22 +168,12 @@ class BlurzAnimation : LedAnimation {
     override fun getName(): String = "Blurz"
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
-        synchronized(soundLevelLock) {
-            currentSoundLevel = 0
-            soundLevelWindow.fill(0)
-            soundLevelIndex = 0
-        }
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
-
-    fun getSoundLevel(): Int = currentSoundLevel
-
-    fun isMicrophoneActive(): Boolean = audioScope != null
 
     companion object {
         private val RANDOM = Random()
-        private const val WINDOW_SIZE = 40
     }
 }
 

@@ -4,6 +4,7 @@ import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
 import com.marsraver.wledfx.audio.AudioPipeline
+import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,10 +32,7 @@ class PuddlesAnimation : LedAnimation {
     private var custom1: Int = 0  // Bin selection for peak mode
     private var custom2: Int = 0  // Volume threshold for peak mode
     
-    @Volatile
-    private var volumeRaw: Int = 0
-    @Volatile
-    private var volumeSmth: Float = 0.0f
+    private var loudnessMeter: LoudnessMeter? = null
     @Volatile
     private var samplePeak: Boolean = false
     @Volatile
@@ -62,24 +60,15 @@ class PuddlesAnimation : LedAnimation {
         startTimeNs = System.nanoTime()
         lastPuddleTime = 0L
         
+        loudnessMeter = LoudnessMeter()
+        
         synchronized(audioLock) {
-            volumeRaw = 0
-            volumeSmth = 0.0f
             samplePeak = false
             maxVol = 0
         }
         
         audioScope?.cancel()
         audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Get RMS volume for volumeRaw and volumeSmth
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeSmth = level.rms.toFloat()
-                        volumeRaw = level.level
-                    }
-                }
-            }
             scope.launch {
                 // Use spectrum to detect peaks
                 AudioPipeline.spectrumFlow(bands = 32).collectLatest { spectrum ->
@@ -113,8 +102,13 @@ class PuddlesAnimation : LedAnimation {
         val fadeVal = map(speed, 0, 255, 240, 254)
         fadeOut(fadeVal)
         
-        val (rawVol, smoothVol, peak, vol) = synchronized(audioLock) {
-            Quadruple(volumeRaw, volumeSmth, samplePeak, maxVol)
+        // Get loudness (0-1024) and convert to 0-255 range for volumeRaw
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val rawVol = (loudness / 1024.0f * 255.0f).toInt().coerceIn(0, 255)
+        val smoothVol = loudness / 1024.0f * 255.0f  // For size calculation
+        
+        val (peak, vol) = synchronized(audioLock) {
+            Pair(samplePeak, maxVol)
         }
         
         // Allow multiple puddles simultaneously - only limit by a very short minimum interval
@@ -225,6 +219,8 @@ class PuddlesAnimation : LedAnimation {
     }
 
     override fun cleanup() {
+        loudnessMeter?.stop()
+        loudnessMeter = null
         audioScope?.cancel()
         audioScope = null
     }
@@ -298,7 +294,5 @@ class PuddlesAnimation : LedAnimation {
         }
     }
     
-    // Helper data class for synchronized return
-    private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 }
 

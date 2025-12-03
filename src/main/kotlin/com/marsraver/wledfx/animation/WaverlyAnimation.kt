@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.pow
@@ -27,10 +21,7 @@ class WaverlyAnimation : LedAnimation {
     private var timeValue: Double = 0.0
     private var currentPalette: Palette? = null
 
-    @Volatile
-    private var smoothedLevel: Double = 0.0
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
 
     override fun supportsPalette(): Boolean = true
 
@@ -47,45 +38,16 @@ class WaverlyAnimation : LedAnimation {
         this.combinedHeight = combinedHeight
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         timeValue = 0.0
-        synchronized(audioLock) {
-            smoothedLevel = 0.0
-        }
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        // Amplify incoming audio for better sensitivity to normal speech
-                        // Multiply by 3-4x to make normal room sounds detectable
-                        val amplified = level.level.toDouble() * 3.5
-                        val incoming = amplified.coerceIn(0.0, 255.0)
-                        
-                        // More responsive: faster attack, faster decay
-                        // When audio is present, respond quickly (30% new)
-                        // When audio stops, decay quickly (only 70% retention)
-                        if (incoming > smoothedLevel) {
-                            // Attack: respond quickly to rising audio
-                            smoothedLevel = smoothedLevel * 0.70 + incoming * 0.30
-                        } else {
-                            // Decay: fade out quickly when audio stops
-                            smoothedLevel = smoothedLevel * 0.85
-                        }
-                        // Apply threshold - very low levels become 0 for true black
-                        // Lower threshold so normal speech can trigger it
-                        if (smoothedLevel < 3.0) {
-                            smoothedLevel = 0.0
-                        }
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
         timeValue = now / 1_000_000.0 / 2.0
         clearPixels()
 
-        val level = synchronized(audioLock) { smoothedLevel }.coerceIn(0.0, 255.0)
+        // Get loudness (0-1024) and convert to 0-255 range
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val level = (loudness / 1024.0 * 255.0).coerceIn(0.0, 255.0)
         
         // When level is 0, should be completely black (no base values)
         if (level <= 0.0) {
@@ -141,11 +103,8 @@ class WaverlyAnimation : LedAnimation {
     override fun getName(): String = "Waverly"
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
-        synchronized(audioLock) {
-            smoothedLevel = 0.0
-        }
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun clearPixels() {

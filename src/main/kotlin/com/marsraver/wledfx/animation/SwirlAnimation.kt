@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -38,39 +32,20 @@ class SwirlAnimation : LedAnimation {
         return currentPalette
     }
 
-    @Volatile
-    private var volumeSmth: Float = 0.0f
-    @Volatile
-    private var volumeRaw: Int = 0
-    private var smoothedVolumeRaw: Int = 0
-    private val volumeLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        synchronized(volumeLock) {
-            volumeSmth = 0.0f
-            volumeRaw = 0
-            smoothedVolumeRaw = 0
-        }
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(volumeLock) {
-                        volumeSmth = level.rms.toFloat()
-                        smoothedVolumeRaw = (smoothedVolumeRaw * 19 + level.level) / 20
-                        volumeRaw = smoothedVolumeRaw
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
-        val (rawVolume, smoothVolume) = synchronized(volumeLock) { volumeRaw to volumeSmth }
+        // Get loudness (0-1024) and convert to appropriate ranges
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val rawVolume = (loudness / 1024.0f * 255.0f).toInt().coerceIn(0, 255)
+        val smoothVolume = loudness / 1024.0f * 255.0f
 
         if (rawVolume < NOISE_FLOOR) {
             fadeToBlack(15)
@@ -141,13 +116,8 @@ class SwirlAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
-        synchronized(volumeLock) {
-            volumeSmth = 0f
-            volumeRaw = 0
-            smoothedVolumeRaw = 0
-        }
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun beatsin8(frequency: Int, minVal: Int, maxVal: Int, timebase: Long): Int {

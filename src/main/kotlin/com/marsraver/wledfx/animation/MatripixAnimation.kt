@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.LoudnessMeter
 
 /**
  * Matripix animation - Shifting pixels with audio-reactive brightness
@@ -28,10 +22,7 @@ class MatripixAnimation : LedAnimation {
     private var secondHand: Int = 0
     private var lastSecondHand: Int = -1
     
-    @Volatile
-    private var volumeRaw: Int = 0
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -52,21 +43,7 @@ class MatripixAnimation : LedAnimation {
         lastSecondHand = -1
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            volumeRaw = 0
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Get RMS volume for volumeRaw
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeRaw = level.level
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
@@ -77,7 +54,9 @@ class MatripixAnimation : LedAnimation {
         val speedFactor = (256 - speed).coerceAtLeast(1)
         secondHand = ((timeMicros / speedFactor / 500) % 16).toInt()
         
-        val volume = synchronized(audioLock) { volumeRaw }
+        // Get loudness (0-1024) and convert to 0-255 range
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val volume = (loudness / 1024.0f * 255.0f).toInt().coerceIn(0, 255)
         
         // Only update when secondHand changes
         if (secondHand != lastSecondHand) {
@@ -127,8 +106,8 @@ class MatripixAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     /**

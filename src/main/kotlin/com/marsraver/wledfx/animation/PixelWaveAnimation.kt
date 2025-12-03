@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -30,10 +24,7 @@ class PixelWaveAnimation : LedAnimation {
     private var secondHand: Int = 0
     private var lastSecondHand: Int = -1
     
-    @Volatile
-    private var volumeRaw: Int = 0
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -54,55 +45,46 @@ class PixelWaveAnimation : LedAnimation {
         lastSecondHand = -1
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            volumeRaw = 0
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Get RMS volume for volumeRaw
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeRaw = level.level
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
         val timeMs = (now - startTimeNs) / 1_000_000
         val timeMicros = (now - startTimeNs) / 1_000
         
+        // Fade out all pixels slightly each frame
+        fadeOut(240)
+        
         // Calculate secondHand: micros()/(256-speed)/500+1 % 16
         // Higher speed = faster ticks
         val speedFactor = (256 - speed).coerceAtLeast(1)
-        secondHand = ((timeMicros / speedFactor / 500 + 1) % 16).toInt()
+        val newSecondHand = ((timeMicros / speedFactor / 500 + 1) % 16).toInt()
         
-        val volume = synchronized(audioLock) { volumeRaw }
+        // Get loudness (0-1024) and convert to 0-255 range
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val volume = (loudness / 1024.0f * 255.0f).toInt().coerceIn(0, 255)
         
-        // Only update when secondHand changes
-        if (secondHand != lastSecondHand) {
-            lastSecondHand = secondHand
+        // Update when secondHand changes (creates new wave pulse)
+        if (newSecondHand != secondHand) {
+            secondHand = newSecondHand
             
-            // Calculate pixel brightness: volumeRaw * intensity / 64
-            val pixBri = (volume * intensity / 64).coerceIn(0, 255)
+            // Calculate pixel brightness: volume * intensity / 64
+            // Ensure minimum brightness so wave is visible even with low audio
+            val pixBri = ((volume * intensity / 64) + 50).coerceIn(50, 255)
             
             // Get color from palette based on time
             val colorIndex = (timeMs % 256).toInt()
             val color = colorFromPalette(colorIndex, true, 0)
             
-            // Set center pixel
+            // Set center pixel with audio-reactive brightness
             val centerX = combinedWidth / 2
             val centerY = combinedHeight / 2
             val centerColor = ColorUtils.blend(RgbColor.BLACK, color, pixBri)
             setPixelColor(centerX, centerY, centerColor)
-            
-            // Expand wave outward from center
-            // Shift pixels outward in all directions
-            expandWaveFromCenter()
         }
+        
+        // Always expand wave outward from center (every frame)
+        expandWaveFromCenter()
         
         return true
     }
@@ -128,8 +110,8 @@ class PixelWaveAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {
@@ -141,12 +123,13 @@ class PixelWaveAnimation : LedAnimation {
 
     /**
      * Expand wave from center - shifts pixels outward in all directions
+     * Each pixel moves one step away from center, creating an expanding wave effect
      */
     private fun expandWaveFromCenter() {
         val centerX = combinedWidth / 2
         val centerY = combinedHeight / 2
         
-        // Create temporary buffer
+        // Create temporary buffer to hold current state
         val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         
         // Copy current state
@@ -157,27 +140,51 @@ class PixelWaveAnimation : LedAnimation {
         }
         
         // Shift pixels outward from center
-        // For each pixel, move it one step away from center
+        // For each pixel, copy from a pixel one step closer to center
         for (x in 0 until combinedWidth) {
             for (y in 0 until combinedHeight) {
                 if (x == centerX && y == centerY) {
-                    // Center pixel stays (already set)
+                    // Center pixel stays (already set in update)
                     continue
                 }
                 
-                // Calculate direction from center
+                // Calculate direction vector from center
                 val dx = x - centerX
                 val dy = y - centerY
                 
+                // Calculate distance from center
+                val distance = sqrt((dx * dx + dy * dy).toDouble())
+                
+                if (distance < 0.5) {
+                    // Very close to center, keep as is
+                    continue
+                }
+                
                 // Get source pixel (one step closer to center)
-                val sourceX = centerX + (dx * 0.9).roundToInt()
-                val sourceY = centerY + (dy * 0.9).roundToInt()
+                // Move inward by a small amount (about 1 pixel)
+                val stepSize = 1.0 / distance.coerceAtLeast(1.0)
+                val sourceX = centerX + (dx * (1.0 - stepSize)).roundToInt()
+                val sourceY = centerY + (dy * (1.0 - stepSize)).roundToInt()
                 
                 if (sourceX in 0 until combinedWidth && sourceY in 0 until combinedHeight) {
+                    // Copy from source (which is closer to center)
                     pixelColors[x][y] = temp[sourceX][sourceY]
                 } else {
+                    // Out of bounds, fade to black
                     pixelColors[x][y] = RgbColor.BLACK
                 }
+            }
+        }
+    }
+    
+    /**
+     * Fade out all pixels by a given amount
+     */
+    private fun fadeOut(amount: Int) {
+        val factor = amount.coerceIn(0, 255) / 255.0
+        for (x in 0 until combinedWidth) {
+            for (y in 0 until combinedHeight) {
+                pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }

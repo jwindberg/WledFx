@@ -1,5 +1,6 @@
 package com.marsraver.wledfx.wled
 
+import com.marsraver.wledfx.wled.model.Strand
 import com.marsraver.wledfx.wled.model.WledInfo
 import java.io.IOException
 import java.net.DatagramPacket
@@ -28,6 +29,10 @@ class WledDdpClient(
 
     fun disconnect() {
         socket?.takeIf { !it.isClosed }?.close()
+    }
+
+    fun sendRgb(strand: Strand) {
+        sendRgb(strand.toIntArray(), strand.length)
     }
 
     @Throws(IOException::class)
@@ -145,7 +150,9 @@ class WledDdpClient(
 
     companion object {
         private const val DDP_PORT = 4048
-        private const val LEDS_PER_PACKET = 1440  // DDP max packet size is 1450 bytes (10 header + 1440 RGB bytes)
+        // DDP max packet size is 1450 bytes (10 header + 1440 RGB bytes)
+        // 1440 bytes / 3 bytes per LED = 480 LEDs per packet
+        private const val LEDS_PER_PACKET = 480
 
         @JvmStatic
         fun getDefaultDdpPort(): Int = DDP_PORT

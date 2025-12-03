@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -32,10 +26,7 @@ class PlasmoidAnimation : LedAnimation {
     private var thisPhase: Int = 0
     private var thatPhase: Int = 0
     
-    @Volatile
-    private var volumeSmth: Float = 0.0f
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -56,21 +47,7 @@ class PlasmoidAnimation : LedAnimation {
         thatPhase = 0
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            volumeSmth = 0.0f
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Get RMS volume for volumeSmth
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeSmth = level.rms.toFloat()
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
@@ -84,7 +61,11 @@ class PlasmoidAnimation : LedAnimation {
         thisPhase += beatsin8_t(6, -4, 4, timeMs)
         thatPhase += beatsin8_t(7, -4, 4, timeMs)
         
-        val volume = synchronized(audioLock) { volumeSmth }
+        // Get loudness (0-1024) and convert to 0-255 range
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val volumeScaled = (loudness / 1024.0f * 255.0f).coerceIn(0.0f, 255.0f)
+        val audioModulation = (volumeScaled * intensity / 255.0f).toInt().coerceIn(0, 255)
+        
         val segmentLength = combinedWidth * combinedHeight
         
         // For each pixel in the strand
@@ -103,9 +84,26 @@ class PlasmoidAnimation : LedAnimation {
             
             val colorIndex = brightness.coerceIn(0, 255)
             
-            // Audio threshold: if volumeSmth * intensity / 64 < brightness, set brightness to 0
-            val threshold = (volume * intensity / 64.0f).toInt()
-            val finalBrightness = if (threshold < brightness) 0 else brightness
+            // Audio reactivity: make changes more obvious
+            // When audio is low, significantly reduce brightness
+            // When audio is high, boost brightness dramatically
+            val audioFactor = if (audioModulation > 0) {
+                // More dramatic scaling: 0.1 to 1.5 (can exceed 255 for boost)
+                (10 + audioModulation * 5) / 256.0f  // 0.04 to 1.0, but we'll use it differently
+            } else {
+                0.1f  // Very dim when no audio
+            }
+            
+            // Apply audio factor more aggressively
+            val finalBrightness = if (audioModulation < 10) {
+                // Very low audio: heavily dimmed
+                (brightness * 0.1f).toInt().coerceIn(0, 255)
+            } else {
+                // Higher audio: scale brightness and add boost
+                val baseBrightness = (brightness * (0.3f + audioModulation / 255.0f * 0.7f)).toInt()
+                val audioBoost = audioModulation / 2  // Add significant boost
+                (baseBrightness + audioBoost).coerceIn(0, 255)
+            }
             
             // Get color from palette
             val color = colorFromPalette(colorIndex, true, 0)
@@ -139,8 +137,8 @@ class PlasmoidAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun fadeToBlackBy(amount: Int) {

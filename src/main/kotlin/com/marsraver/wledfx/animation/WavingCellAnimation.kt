@@ -3,13 +3,6 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -26,28 +19,10 @@ class WavingCellAnimation : LedAnimation {
     private var timeValue: Double = 0.0
     private var currentPalette: Palette? = null
 
-    @Volatile
-    private var smoothedLevel: Double = 0.0
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
-
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
         timeValue = 0.0
-        synchronized(audioLock) {
-            smoothedLevel = 0.0
-        }
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        smoothedLevel = smoothedLevel * 0.85 + level.level * 0.15
-                    }
-                }
-            }
-        }
     }
 
     override fun update(now: Long): Boolean {
@@ -61,18 +36,23 @@ class WavingCellAnimation : LedAnimation {
             return RgbColor.BLACK
         }
 
-        val level = synchronized(audioLock) { smoothedLevel }.coerceIn(0.0, 255.0)
-        val energy = 0.4 + (level / 255.0) * 1.2
-        val heatBoost = (level / 255.0) * 90.0
+        // Constant values for base animation (no audio reactivity)
+        val energy = 1.0
+        val heatBoost = 0.0
+        val brightnessScale = 1.0
 
         val t = timeValue
+        // Wave calculations - energy affects speed and amplitude
         val inner = sin8(y * 5 + t * 5.0 * energy)
         val wave = sin8(x * 10 + inner * energy)
         val vertical = cos8(y * 10.0 * energy)
+        
+        // Combine wave components with energy and heatBoost
         var index = wave * energy + vertical * (0.7 + energy * 0.3) + t + heatBoost
         index = wrapToPaletteRange(index)
         val color = colorFromPalette(index)
-        val brightnessScale = (0.6 + level / 255.0 * 0.8).coerceIn(0.6, 1.4)
+        
+        // Apply brightness scaling based on audio
         return ColorUtils.scaleBrightness(color, brightnessScale)
     }
 
@@ -89,11 +69,7 @@ class WavingCellAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
-        synchronized(audioLock) {
-            smoothedLevel = 0.0
-        }
+        // No cleanup needed
     }
 
     private fun sin8(theta: Double): Double {

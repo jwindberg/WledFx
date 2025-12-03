@@ -3,22 +3,13 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-import kotlin.math.log10
-import kotlin.math.max
-import kotlin.math.min
+import com.marsraver.wledfx.audio.LoudnessMeter
 
 /**
  * Gravcenter animation - Audio-reactive bars expanding from center with gravity effect
  * By: Andrew Tuline
  */
-class GravcenterAnimation : LedAnimation {
+class GravCenterAnimation : LedAnimation {
 
     private data class GravityState(
         var topLED: Int = 0,
@@ -35,10 +26,7 @@ class GravcenterAnimation : LedAnimation {
     
     private val gravityStates = mutableListOf<GravityState>()
     
-    @Volatile
-    private var volumeSmth: Float = 0.0f
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -63,20 +51,7 @@ class GravcenterAnimation : LedAnimation {
             gravityStates.add(GravityState())
         }
         
-        synchronized(audioLock) {
-            volumeSmth = 0.0f
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeSmth = level.rms.toFloat()
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
@@ -85,7 +60,19 @@ class GravcenterAnimation : LedAnimation {
         // Fade out by 251
         fadeOut(251)
         
-        val volume = synchronized(audioLock) { volumeSmth }
+        // Get loudness (0-1024) and convert to volume-like value
+        // The original RMS values were small, but after calculation they need to produce
+        // segmentSampleAvg values that map to meaningful pixel counts (0-16 for a 32-wide grid)
+        // We need much larger volume values to produce segmentSampleAvg in the 0-32 range
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        // Scale 0-1024 to a range that produces segmentSampleAvg values around 0-32
+        // If loudness=1024, we want segmentSampleAvg*2 to be around 32
+        // segmentSampleAvg = volume * intensity / 255.0f * 0.125f
+        // segmentSampleAvg * 2 = volume * intensity / 255.0f * 0.25f
+        // For segmentSampleAvg*2 = 32: volume = 32 * 255.0f / (intensity * 0.25f)
+        // With intensity=128: volume = 32 * 255 / (128 * 0.25) = 8160 / 32 = 255
+        // So scale 0-1024 to 0-255 (or similar range)
+        val volume = (loudness / 1024.0f) * 255.0f  // Convert 0-1024 to 0-255
         
         // Calculate segment sample average
         val segmentSampleAvg = volume * intensity / 255.0f * 0.125f  // divide by 8
@@ -144,7 +131,7 @@ class GravcenterAnimation : LedAnimation {
         }
     }
 
-    override fun getName(): String = "Gravcenter"
+    override fun getName(): String = "GravCenter"
 
     override fun supportsSpeed(): Boolean = true
 
@@ -157,8 +144,8 @@ class GravcenterAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {

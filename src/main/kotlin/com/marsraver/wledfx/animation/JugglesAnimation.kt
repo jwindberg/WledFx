@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.sin
 import kotlin.math.PI
 import kotlin.math.max
@@ -30,10 +24,7 @@ class JugglesAnimation : LedAnimation {
     private var speed: Int = 128
     private var intensity: Int = 128
     
-    @Volatile
-    private var volumeSmth: Float = 0.0f
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -52,21 +43,7 @@ class JugglesAnimation : LedAnimation {
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            volumeSmth = 0.0f
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Get RMS volume for volumeSmth
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeSmth = level.rms.toFloat()
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
@@ -75,8 +52,9 @@ class JugglesAnimation : LedAnimation {
         // Fade out by 224 (6.25%)
         fadeOut(224)
         
-        val volume = synchronized(audioLock) { volumeSmth }
-        val mySampleAgc = max(min(volume, 255.0f), 0.0f).toInt()
+        // Get loudness (0-1024) and convert to brightness (0-255)
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        val mySampleAgc = (loudness / 4).coerceIn(0, 255)  // Map 0-1024 to 0-255
         
         val segmentLength = combinedWidth * combinedHeight
         val numBalls = (intensity / 32 + 1).coerceAtLeast(1)
@@ -125,8 +103,8 @@ class JugglesAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {

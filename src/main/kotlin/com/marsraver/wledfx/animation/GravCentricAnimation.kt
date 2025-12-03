@@ -3,20 +3,13 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-import kotlin.math.log10
+import com.marsraver.wledfx.audio.LoudnessMeter
 
 /**
- * Gravfreq animation - Audio-reactive bars expanding from center with frequency-based colors
+ * Gravcntric animation - Audio-reactive bars expanding from center with gravity effect (centered variant)
  * By: Andrew Tuline
  */
-class GravfreqAnimation : LedAnimation {
+class GravCentricAnimation : LedAnimation {
 
     private data class GravityState(
         var topLED: Int = 0,
@@ -33,15 +26,8 @@ class GravfreqAnimation : LedAnimation {
     
     private val gravityStates = mutableListOf<GravityState>()
     
-    @Volatile
-    private var volumeSmth: Float = 0.0f
-    @Volatile
-    private var fftMajorPeak: Float = 0.0f
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var loudnessMeter: LoudnessMeter? = null
     private var startTimeNs: Long = 0L
-
-    private val MAX_FREQ_LOG10 = 4.5f  // Approximate max frequency log10
 
     override fun supportsPalette(): Boolean = true
 
@@ -64,49 +50,19 @@ class GravfreqAnimation : LedAnimation {
             gravityStates.add(GravityState())
         }
         
-        synchronized(audioLock) {
-            volumeSmth = 0.0f
-            fftMajorPeak = 0.0f
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.rmsFlow().collectLatest { level ->
-                    synchronized(audioLock) {
-                        volumeSmth = level.rms.toFloat()
-                    }
-                }
-            }
-            scope.launch {
-                AudioPipeline.spectrumFlow().collectLatest { spectrum ->
-                    synchronized(audioLock) {
-                        // Estimate major peak from spectrum
-                        var maxMag = 0.0f
-                        var maxFreq = 0.0f
-                        for (i in spectrum.bands.indices) {
-                            val bandValue = spectrum.bands[i].toFloat()
-                            if (bandValue > maxMag) {
-                                maxMag = bandValue
-                                maxFreq = i * 44100.0f / (spectrum.bands.size * 2.0f)
-                            }
-                        }
-                        fftMajorPeak = maxFreq.coerceAtLeast(1.0f)
-                    }
-                }
-            }
-        }
+        loudnessMeter = LoudnessMeter()
     }
 
     override fun update(now: Long): Boolean {
         val timeMs = (now - startTimeNs) / 1_000_000
         
-        // Fade out by 250
-        fadeOut(250)
+        // Fade out by 253
+        fadeOut(253)
         
-        val (volume, fftPeak) = synchronized(audioLock) {
-            Pair(volumeSmth, fftMajorPeak)
-        }
+        // Get loudness (0-1024) and convert to volume-like value
+        val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
+        // Scale 0-1024 to 0-255 (same as GravCenterAnimation)
+        val volume = (loudness / 1024.0f) * 255.0f
         
         val segmentSampleAvg = volume * intensity / 255.0f * 0.125f
         val mySampleAvg = mapf(segmentSampleAvg * 2.0f, 0.0f, 32.0f, 0.0f, combinedWidth / 2.0f)
@@ -124,18 +80,14 @@ class GravfreqAnimation : LedAnimation {
                 gravcen.topLED--
             }
             
-            // Draw bars from center using frequency-based colors
-            var peak = fftPeak
-            if (peak < 1.0f) peak = 1.0f
-            
+            // Draw bars from center (Gravcentric mode)
             for (i in 0 until tempsamp) {
-                // Calculate color index from FFT major peak
-                val index = ((log10(peak.toDouble()) - (MAX_FREQ_LOG10 - 1.78f)) * 255.0).toInt().coerceIn(0, 255)
+                val index = (segmentSampleAvg * 24 + timeMs / 200).toInt() % 256
                 val color = colorFromPalette(index, true, 0)
                 
                 val centerX = combinedWidth / 2
                 setPixelColor(centerX + i, y, color)
-                setPixelColor(centerX - i - 1, y, color)
+                setPixelColor(centerX - 1 - i, y, color)
             }
             
             // Draw top LED indicator (gray)
@@ -160,7 +112,7 @@ class GravfreqAnimation : LedAnimation {
         }
     }
 
-    override fun getName(): String = "Gravfreq"
+    override fun getName(): String = "GravCentric"
 
     override fun supportsSpeed(): Boolean = true
 
@@ -173,8 +125,8 @@ class GravfreqAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        loudnessMeter?.stop()
+        loudnessMeter = null
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {
