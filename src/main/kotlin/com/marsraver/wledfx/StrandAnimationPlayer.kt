@@ -1,7 +1,6 @@
 package com.marsraver.wledfx
 
 import com.marsraver.wledfx.strandanimation.CandyCaneAnimation
-import com.marsraver.wledfx.strandanimation.ColorWheelAnimation
 import com.marsraver.wledfx.wled.WledClient
 import com.marsraver.wledfx.wled.WledDdpClient
 import com.marsraver.wledfx.wled.model.Strand
@@ -14,7 +13,7 @@ import com.marsraver.wledfx.wled.model.Strand
  *
  * Usage: Run the main() function
  */
-class WledClientDemo {
+class StrandAnimationPlayer {
     companion object {
 
 //        private const val IP_ADDRESS = "192.168.7.170"

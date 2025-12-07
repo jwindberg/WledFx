@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.FftMeter
 import kotlin.math.abs
 import kotlin.math.PI
 import kotlin.math.sin
@@ -26,12 +20,9 @@ class RocktavesAnimation : LedAnimation {
     private lateinit var pixelColors: Array<Array<RgbColor>>
     private var currentPalette: Palette? = null
     
-    @Volatile
+    private var fftMeter: FftMeter? = null
     private var fftMajorPeak: Float = 0.0f
-    @Volatile
     private var myMagnitude: Float = 0.0f
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -50,44 +41,10 @@ class RocktavesAnimation : LedAnimation {
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            fftMajorPeak = 0.0f
-            myMagnitude = 0.0f
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Use spectrum to estimate major peak frequency
-                AudioPipeline.spectrumFlow(bands = 32).collectLatest { spectrum ->
-                    synchronized(audioLock) {
-                        // Find the band with highest magnitude
-                        var maxBand = 0
-                        var maxValue = 0
-                        var totalMagnitude = 0.0
-                        
-                        for (i in spectrum.bands.indices) {
-                            val value = spectrum.bands[i]
-                            totalMagnitude += value
-                            if (value > maxValue) {
-                                maxValue = value
-                                maxBand = i
-                            }
-                        }
-                        
-                        // Estimate frequency from band (assuming 44.1kHz sample rate)
-                        // Each band represents ~689 Hz (44100 / 64 bands)
-                        // For 32 bands, each represents ~1378 Hz
-                        val estimatedFreq = maxBand * (44100.0f / 64.0f) + (44100.0f / 128.0f)
-                        fftMajorPeak = estimatedFreq.coerceIn(0.0f, 22050.0f)
-                        
-                        // Magnitude is the total energy - amplify for better sensitivity
-                        // Original divides by 16, but we'll amplify by 2-3x for better sensitivity
-                        myMagnitude = (totalMagnitude / 8.0 * 1.5).toFloat().coerceIn(0.0f, 255.0f)
-                    }
-                }
-            }
-        }
+        // Use 32 bands for frequency estimation (matches original intent)
+        fftMeter = FftMeter(bands = 32)
+        fftMajorPeak = 0.0f
+        myMagnitude = 0.0f
     }
 
     override fun update(now: Long): Boolean {
@@ -96,9 +53,12 @@ class RocktavesAnimation : LedAnimation {
         // Fade to black
         fadeToBlack(16)
         
-        val (frTemp, magnitude) = synchronized(audioLock) {
-            Pair(fftMajorPeak, myMagnitude)
-        }
+        // Get major peak frequency and magnitude from FftMeter
+        val frTemp = fftMeter?.getMajorPeakFrequency() ?: 0.0f
+        // Approximate magnitude as sum of bands (normalized and scaled)
+        val bands = fftMeter?.getBands() ?: IntArray(32)
+        val totalMagnitude = bands.sum()
+        val magnitude = (totalMagnitude / 8.0 * 1.5).toFloat().coerceIn(0.0f, 255.0f)
         
         // Lower threshold for better sensitivity to quieter music
         if (magnitude < 15.0f) {
@@ -138,10 +98,10 @@ class RocktavesAnimation : LedAnimation {
         val x = i % combinedWidth
         val y = i / combinedWidth
         
-        // Get color from palette
-        val color1 = RgbColor(255, 0, 0) // SEGCOLOR(1) - default red, could be made configurable
-        val color2 = colorFromPalette(noteIndex, false, 0)
-        val blendedColor = ColorUtils.blend(color1, color2, brightness)
+        // Get color from palette and scale by brightness
+        val baseColor = colorFromPalette(noteIndex, false, 0)
+        val brightnessFactor = brightness / 255.0
+        val blendedColor = ColorUtils.scaleBrightness(baseColor, brightnessFactor)
         
         // Add color to pixel
         if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
@@ -161,9 +121,11 @@ class RocktavesAnimation : LedAnimation {
 
     override fun getName(): String = "Rocktaves"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun fadeToBlack(amount: Int) {

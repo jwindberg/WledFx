@@ -3,14 +3,8 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
+import com.marsraver.wledfx.audio.FftMeter
 import com.marsraver.wledfx.audio.LoudnessMeter
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import kotlin.math.log10
 
 /**
@@ -35,10 +29,7 @@ class GravFreqAnimation : LedAnimation {
     private val gravityStates = mutableListOf<GravityState>()
     
     private var loudnessMeter: LoudnessMeter? = null
-    @Volatile
-    private var fftMajorPeak: Float = 0.0f
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var fftMeter: FftMeter? = null
     private var startTimeNs: Long = 0L
 
     private val MAX_FREQ_LOG10 = 4.5f  // Approximate max frequency log10
@@ -65,31 +56,8 @@ class GravFreqAnimation : LedAnimation {
         }
         
         loudnessMeter = LoudnessMeter()
-        
-        synchronized(audioLock) {
-            fftMajorPeak = 0.0f
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.spectrumFlow().collectLatest { spectrum ->
-                    synchronized(audioLock) {
-                        // Estimate major peak from spectrum
-                        var maxMag = 0.0f
-                        var maxFreq = 0.0f
-                        for (i in spectrum.bands.indices) {
-                            val bandValue = spectrum.bands[i].toFloat()
-                            if (bandValue > maxMag) {
-                                maxMag = bandValue
-                                maxFreq = i * 44100.0f / (spectrum.bands.size * 2.0f)
-                            }
-                        }
-                        fftMajorPeak = maxFreq.coerceAtLeast(1.0f)
-                    }
-                }
-            }
-        }
+        // Use 32 bands for better frequency resolution (similar to original)
+        fftMeter = FftMeter(bands = 32)
     }
 
     override fun update(now: Long): Boolean {
@@ -103,7 +71,8 @@ class GravFreqAnimation : LedAnimation {
         // Scale 0-1024 to 0-255 (same as GravCenterAnimation)
         val volume = (loudness / 1024.0f) * 255.0f
         
-        val fftPeak = synchronized(audioLock) { fftMajorPeak }
+        // Get major peak frequency from FftMeter
+        val fftPeak = fftMeter?.getMajorPeakFrequency() ?: 0.0f
         
         val segmentSampleAvg = volume * intensity / 255.0f * 0.125f
         val mySampleAvg = mapf(segmentSampleAvg * 2.0f, 0.0f, 32.0f, 0.0f, combinedWidth / 2.0f)
@@ -159,6 +128,8 @@ class GravFreqAnimation : LedAnimation {
 
     override fun getName(): String = "GravFreq"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {
@@ -172,8 +143,8 @@ class GravFreqAnimation : LedAnimation {
     override fun cleanup() {
         loudnessMeter?.stop()
         loudnessMeter = null
-        audioScope?.cancel()
-        audioScope = null
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {

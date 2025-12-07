@@ -3,14 +3,9 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.FftMeter
 import kotlin.math.min
+import kotlin.math.pow
 
 /**
  * Funky Plank animation - Audio-reactive scrolling bars
@@ -29,10 +24,7 @@ class FunkyPlankAnimation : LedAnimation {
     private var secondHand: Int = 0
     private var lastSecondHand: Int = -1
     
-    @Volatile
-    private var fftResult: ByteArray = ByteArray(16)
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
+    private var fftMeter: FftMeter? = null
     private var startTimeNs: Long = 0L
 
     override fun supportsPalette(): Boolean = true
@@ -53,28 +45,7 @@ class FunkyPlankAnimation : LedAnimation {
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            fftResult = ByteArray(16)
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.spectrumFlow().collectLatest { spectrum ->
-                    synchronized(audioLock) {
-                        // Convert spectrum bands to 8-bit values (0-255)
-                        val numBands = min(spectrum.bands.size, 16)
-                        for (i in 0 until numBands) {
-                            // Scale to 0-255 range
-                            val bandVal = spectrum.bands[i].toFloat()
-                            val clamped = if (bandVal < 0.0f) 0.0f else if (bandVal > 1.0f) 1.0f else bandVal
-                            val bandValue = (clamped * 255.0f).toInt().coerceIn(0, 255)
-                            fftResult[i] = bandValue.coerceIn(0, 255).toByte()
-                        }
-                    }
-                }
-            }
-        }
+        fftMeter = FftMeter(bands = 16)
     }
 
     override fun update(now: Long): Boolean {
@@ -85,7 +56,9 @@ class FunkyPlankAnimation : LedAnimation {
         val speedFactor = (256 - speed).coerceAtLeast(1)
         secondHand = ((timeMicros / speedFactor / 500 + 1) % 64).toInt()
         
-        val fft = synchronized(audioLock) { fftResult.copyOf() }
+        // Get FFT bands (0-255 values) from FftMeter
+        // Use normalized bands so we get good dynamic range even when absolute levels are low
+        val fftBands = fftMeter?.getNormalizedBands() ?: IntArray(16)
         
         // Only update when secondHand changes
         if (secondHand != lastSecondHand) {
@@ -106,26 +79,30 @@ class FunkyPlankAnimation : LedAnimation {
             var b = 0
             for (band in 0 until numbBands step bandInc) {
                 val bandIndex = band % 16
-                val bandValue = (fft[bandIndex].toInt() and 0xFF)
+                val bandValue = fftBands.getOrElse(bandIndex) { 0 }
                 
-                // Add threshold to filter out background noise (only show if above ~20% of max)
-                val noiseThreshold = 50  // Only show if band value is above 50 (out of 255)
+                // Add threshold to filter out background noise
+                // Normalized bands are already scaled, so a small threshold is enough
+                val noiseThreshold = 10  // Only show if band value is above 10 (out of 255)
                 if (bandValue < noiseThreshold) {
                     // Skip this band, leave it black
                     b++
                     continue
                 }
                 
-                // Normalize after threshold
+                // Normalize after threshold (0.0 - 1.0)
                 val normalizedValue = ((bandValue - noiseThreshold).toFloat() / (255 - noiseThreshold)).coerceIn(0.0f, 1.0f)
                 
-                // Use square root curve to compress dynamic range (prevent peaking)
-                val curvedValue = kotlin.math.sqrt(normalizedValue)
+                // Apply a gentle gamma curve to enhance contrast without crushing lows
+                // gamma < 1.0 brightens low values; here we keep it subtle
+                val gamma = 0.8f
+                val curvedValue = normalizedValue.pow(gamma)
                 
                 // Use band index to vary color across bands - map to full 0-255 range for palette
                 val colorIndex = (bandIndex * 256 / 16) % 256  // Spread bands across full color range
-                // Map curved value to brightness range (reduced max to prevent peaking)
-                val v = map((curvedValue * 255.0f).toInt(), 0, 255, 30, 200)  // Reduced max brightness
+                // Map curved value to brightness range
+                // Use almost full range so quiet sections are visibly dim and loud sections are bright
+                val v = map((curvedValue * 255.0f).toInt(), 0, 255, 10, 255)
                 
                 for (w in 0 until barWidth) {
                     val xpos = (barWidth * b) + w
@@ -158,6 +135,8 @@ class FunkyPlankAnimation : LedAnimation {
 
     override fun getName(): String = "Funky Plank"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {
@@ -176,8 +155,8 @@ class FunkyPlankAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {

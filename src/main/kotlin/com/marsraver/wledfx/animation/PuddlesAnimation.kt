@@ -3,14 +3,8 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
+import com.marsraver.wledfx.audio.FftMeter
 import com.marsraver.wledfx.audio.LoudnessMeter
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import java.util.Random
@@ -33,12 +27,11 @@ class PuddlesAnimation : LedAnimation {
     private var custom2: Int = 0  // Volume threshold for peak mode
     
     private var loudnessMeter: LoudnessMeter? = null
+    private var fftMeter: FftMeter? = null
     @Volatile
     private var samplePeak: Boolean = false
     @Volatile
     private var maxVol: Int = 0
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
     private var startTimeNs: Long = 0L
     private val random = Random()
     private var lastPuddleTime: Long = 0L
@@ -61,37 +54,11 @@ class PuddlesAnimation : LedAnimation {
         lastPuddleTime = 0L
         
         loudnessMeter = LoudnessMeter()
+        // Use 32 bands for peak detection (matches original)
+        fftMeter = FftMeter(bands = 32)
         
-        synchronized(audioLock) {
-            samplePeak = false
-            maxVol = 0
-        }
-        
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Use spectrum to detect peaks
-                AudioPipeline.spectrumFlow(bands = 32).collectLatest { spectrum ->
-                    synchronized(audioLock) {
-                        var maxValue = 0
-                        var totalMagnitude = 0.0
-                        
-                        for (i in spectrum.bands.indices) {
-                            val value = spectrum.bands[i]
-                            totalMagnitude += value
-                            if (value > maxValue) {
-                                maxValue = value
-                            }
-                        }
-                        
-                        // Detect peak - if magnitude exceeds threshold
-                        val threshold = 50
-                        samplePeak = maxValue > threshold
-                        maxVol = (totalMagnitude / 16.0).toInt().coerceIn(0, 255)
-                    }
-                }
-            }
-        }
+        samplePeak = false
+        maxVol = 0
     }
 
     override fun update(now: Long): Boolean {
@@ -107,9 +74,14 @@ class PuddlesAnimation : LedAnimation {
         val rawVol = (loudness / 1024.0f * 255.0f).toInt().coerceIn(0, 255)
         val smoothVol = loudness / 1024.0f * 255.0f  // For size calculation
         
-        val (peak, vol) = synchronized(audioLock) {
-            Pair(samplePeak, maxVol)
-        }
+        // Use FftMeter to detect peaks and overall magnitude
+        val fftBands = fftMeter?.getNormalizedBands() ?: IntArray(32)
+        val maxValue = fftBands.maxOrNull() ?: 0
+        val totalMagnitude = fftBands.sum()
+        
+        val threshold = 50
+        val peak = maxValue > threshold
+        val vol = (totalMagnitude / 16.0).toInt().coerceIn(0, 255)
         
         // Allow multiple puddles simultaneously - only limit by a very short minimum interval
         // Speed controls minimum interval: higher speed = shorter interval (more frequent)
@@ -178,6 +150,8 @@ class PuddlesAnimation : LedAnimation {
 
     override fun getName(): String = "Puddles"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {
@@ -221,8 +195,8 @@ class PuddlesAnimation : LedAnimation {
     override fun cleanup() {
         loudnessMeter?.stop()
         loudnessMeter = null
-        audioScope?.cancel()
-        audioScope = null
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun fadeOut(amount: Int) {

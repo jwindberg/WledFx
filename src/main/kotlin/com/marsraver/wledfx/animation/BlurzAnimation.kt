@@ -167,6 +167,8 @@ class BlurzAnimation : LedAnimation {
 
     override fun getName(): String = "Blurz"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun cleanup() {
         loudnessMeter?.stop()
         loudnessMeter = null

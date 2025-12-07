@@ -91,6 +91,7 @@ class WledSimulatorApp : Application() {
     private lateinit var candleMultiCheckBox: CheckBox
     private lateinit var twinkleCheckBox: CheckBox
     private lateinit var puddlesPeakCheckBox: CheckBox
+    private lateinit var audioIndicatorLabel: Label
     private var lastRandomSwitchNs: Long = 0L
 
     private val combinedWidth = VIRTUAL_GRID_WIDTH
@@ -279,11 +280,18 @@ class WledSimulatorApp : Application() {
         }
         paletteLabel.isDisable = true
 
+        audioIndicatorLabel = Label("♪").apply {
+            isVisible = false
+            isManaged = false
+            style = "-fx-font-size: 16px;"
+        }
+        
         val controlsBox = HBox(10.0,
             statusLabel,
             retryButton,
             Label("Animation:"),
             animationComboBox,
+            audioIndicatorLabel,
             startButton,
             randomCheckBox,
             randomIntervalField,
@@ -578,6 +586,11 @@ class WledSimulatorApp : Application() {
         val animation = newAnimation
         animation.init(combinedWidth, combinedHeight)
         
+        // Update audio indicator (tiny music note) based on animation capabilities
+        val isAudioReactive = animation.isAudioReactive()
+        audioIndicatorLabel.isVisible = isAudioReactive
+        audioIndicatorLabel.isManaged = isAudioReactive
+        
         // Update UI controls based on animation capabilities
         val supportsColor = animation.supportsColor()
         val supportsPalette = animation.supportsPalette()
@@ -797,6 +810,7 @@ class WledSimulatorApp : Application() {
         val supportsMultiMode = tempAnimation?.supportsMultiMode() ?: false
         val supportsCatMode = tempAnimation?.supportsCatMode() ?: false
         val supportsPeakDetect = tempAnimation?.supportsPeakDetect() ?: false
+        val isAudioReactive = tempAnimation?.isAudioReactive() ?: false
         
         textInputLabel.isVisible = supportsTextInput
         textInputField.isVisible = supportsTextInput
@@ -815,6 +829,10 @@ class WledSimulatorApp : Application() {
         
         puddlesPeakCheckBox.isVisible = supportsPeakDetect
         puddlesPeakCheckBox.isManaged = supportsPeakDetect
+        
+        // Update audio indicator visibility even before animation is started
+        audioIndicatorLabel.isVisible = isAudioReactive
+        audioIndicatorLabel.isManaged = isAudioReactive
         
         // Check if animation supports speed (self-identified by animation)
         val supportsSpeed = currentAnimation?.supportsSpeed() ?: false

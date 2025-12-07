@@ -3,13 +3,7 @@ import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 import com.marsraver.wledfx.color.Palette
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.FftMeter
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.log10
@@ -39,14 +33,13 @@ class RipplePeakAnimation : LedAnimation {
     private var custom1: Int = 0      // Select bin (not used in 2D adaptation)
     private var custom2: Int = 0      // Volume threshold (min)
     
+    private var fftMeter: FftMeter? = null
     @Volatile
     private var samplePeak: Boolean = false
     @Volatile
     private var fftMajorPeak: Float = 0.0f
     @Volatile
     private var maxVol: Int = 0
-    private val audioLock = Any()
-    private var audioScope: CoroutineScope? = null
     private var startTimeNs: Long = 0L
     private val random = Random()
 
@@ -67,44 +60,12 @@ class RipplePeakAnimation : LedAnimation {
         ripples.clear()
         startTimeNs = System.nanoTime()
         
-        synchronized(audioLock) {
-            samplePeak = false
-            fftMajorPeak = 0.0f
-            maxVol = 0
-        }
+        samplePeak = false
+        fftMajorPeak = 0.0f
+        maxVol = 0
         
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                // Use spectrum to detect peaks and estimate major frequency
-                AudioPipeline.spectrumFlow(bands = 32).collectLatest { spectrum ->
-                    synchronized(audioLock) {
-                        // Find the band with highest magnitude
-                        var maxBand = 0
-                        var maxValue = 0
-                        var totalMagnitude = 0.0
-                        
-                        for (i in spectrum.bands.indices) {
-                            val value = spectrum.bands[i]
-                            totalMagnitude += value
-                            if (value > maxValue) {
-                                maxValue = value
-                                maxBand = i
-                            }
-                        }
-                        
-                        // Estimate frequency from band
-                        val estimatedFreq = (maxBand * (44100.0 / 64.0) + (44100.0 / 128.0)).toFloat()
-                        fftMajorPeak = estimatedFreq.coerceIn(0.0f, 22050.0f)
-                        
-                        // Detect peak - if magnitude exceeds threshold
-                        val threshold = if (custom2 > 0) custom2 else 50
-                        samplePeak = maxValue > threshold
-                        maxVol = (totalMagnitude / 16.0).toInt().coerceIn(0, 255)
-                    }
-                }
-            }
-        }
+        // Use 32 bands for peak detection and frequency estimation
+        fftMeter = FftMeter(bands = 32)
     }
 
     override fun update(now: Long): Boolean {
@@ -112,9 +73,15 @@ class RipplePeakAnimation : LedAnimation {
         fadeOut(240)
         fadeOut(240)
         
-        val (peak, fftPeak, vol) = synchronized(audioLock) {
-            Triple(samplePeak, fftMajorPeak, maxVol)
-        }
+        // Use FftMeter for peaks, major frequency and volume
+        val bands = fftMeter?.getNormalizedBands() ?: IntArray(32)
+        val maxValue = bands.maxOrNull() ?: 0
+        val totalMagnitude = bands.sum()
+        val fftPeak = fftMeter?.getMajorPeakFrequency() ?: 0.0f
+        
+        val threshold = if (custom2 > 0) custom2 else 50
+        val peak = maxValue > threshold
+        val vol = (totalMagnitude / 16.0).toInt().coerceIn(0, 255)
         
         val maxRipples = (intensity / 16).coerceAtLeast(1)
         
@@ -159,9 +126,9 @@ class RipplePeakAnimation : LedAnimation {
                 
                 else -> {  // Middle of the ripples - expand outward
                     val brightness = (2 * 255 / ripple.state).coerceIn(0, 255)
-                    val color = colorFromPalette(ripple.color, false, 0)
-                    val color1 = RgbColor(255, 0, 0)  // SEGCOLOR(1) - default red
-                    val blendedColor = ColorUtils.blend(color1, color, brightness)
+                    val baseColor = colorFromPalette(ripple.color, false, 0)
+                    val brightnessFactor = brightness / 255.0
+                    val blendedColor = ColorUtils.scaleBrightness(baseColor, brightnessFactor)
                     
                     // Expand in all directions (circular ripple for 2D)
                     val radius = ripple.state.toDouble()
@@ -204,9 +171,11 @@ class RipplePeakAnimation : LedAnimation {
 
     override fun getName(): String = "Ripple Peak"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun fadeOut(amount: Int) {

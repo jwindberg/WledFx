@@ -102,6 +102,8 @@ class WaverlyAnimation : LedAnimation {
 
     override fun getName(): String = "Waverly"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun cleanup() {
         loudnessMeter?.stop()
         loudnessMeter = null

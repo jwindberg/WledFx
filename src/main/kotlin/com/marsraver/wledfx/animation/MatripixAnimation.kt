@@ -95,6 +95,8 @@ class MatripixAnimation : LedAnimation {
 
     override fun getName(): String = "Matripix"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {

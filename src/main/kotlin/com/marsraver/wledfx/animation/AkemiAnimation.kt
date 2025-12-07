@@ -2,13 +2,7 @@ package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.FftMeter
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -21,10 +15,8 @@ class AkemiAnimation : LedAnimation {
     private var combinedWidth: Int = 0
     private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<RgbColor>> = emptyArray()
-
-    private val fftResult = IntArray(16)
-    private val spectrumLock = Any()
-    private var audioScope: CoroutineScope? = null
+    
+    private var fftMeter: FftMeter? = null
 
     private var colorSpeed: Int = 128
     private var intensity: Int = 128
@@ -33,24 +25,13 @@ class AkemiAnimation : LedAnimation {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.spectrumFlow(bands = 16).collectLatest { spectrum ->
-                    synchronized(spectrumLock) {
-                        val bands = spectrum.bands
-                        for (i in fftResult.indices) {
-                            val incoming = bands.getOrNull(i) ?: 0
-                            fftResult[i] = ((fftResult[i] * 3) + incoming) / 4
-                        }
-                    }
-                }
-            }
-        }
+        // Use 16 bands for side GEQ bars
+        fftMeter = FftMeter(bands = 16)
     }
 
     override fun update(now: Long): Boolean {
-        val spectrumSnapshot = synchronized(spectrumLock) { fftResult.clone() }
+        // Use normalized bands for better sensitivity across different volumes
+        val spectrumSnapshot = fftMeter?.getNormalizedBands() ?: IntArray(16)
         val timeMs = now / 1_000_000L
         val speedFactor = (colorSpeed shr 2) + 2
         var counter = ((timeMs * speedFactor) and 0xFFFF).toInt()
@@ -67,7 +48,8 @@ class AkemiAnimation : LedAnimation {
         val armsAndLegsColor = armsAndLegsDefault
 
         val base = spectrumSnapshot.getOrElse(0) { 0 } / 255.0f
-        val isDancing = intensity > 128 && spectrumSnapshot.getOrElse(0) { 0 } > 128
+        // More sensitive dancing trigger: responds at lower intensities and lower audio levels
+        val isDancing = intensity > 64 && spectrumSnapshot.getOrElse(0) { 0 } > 64
 
         if (isDancing) {
             for (x in 0 until combinedWidth) {
@@ -89,8 +71,9 @@ class AkemiAnimation : LedAnimation {
                     5 -> multiplyColor(faceColor, normalFactor)
                     4 -> faceColor
                     7 -> eyeColor
-                    8 -> if (base > 0.4f) {
-                        val boost = clamp01(base)
+                    8 -> if (base > 0.2f) {
+                        // Boost sound color more aggressively but still clamp to valid range
+                        val boost = clamp01(base * 1.8f)
                         RgbColor(
                             min(255, (soundColor.r * boost).roundToInt()),
                             min(255, (soundColor.g * boost).roundToInt()),
@@ -147,12 +130,11 @@ class AkemiAnimation : LedAnimation {
 
     override fun getName(): String = "Akemi"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
-        synchronized(spectrumLock) {
-            fftResult.fill(0)
-        }
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun mapValue(value: Int, inMin: Int, inMax: Int, outMin: Int, outMax: Int): Int {

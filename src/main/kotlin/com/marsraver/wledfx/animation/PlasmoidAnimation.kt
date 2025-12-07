@@ -126,6 +126,8 @@ class PlasmoidAnimation : LedAnimation {
 
     override fun getName(): String = "Plasmoid"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {

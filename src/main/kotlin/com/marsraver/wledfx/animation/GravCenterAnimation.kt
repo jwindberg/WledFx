@@ -133,6 +133,8 @@ class GravCenterAnimation : LedAnimation {
 
     override fun getName(): String = "GravCenter"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {

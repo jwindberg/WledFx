@@ -114,6 +114,8 @@ class GravCentricAnimation : LedAnimation {
 
     override fun getName(): String = "GravCentric"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {

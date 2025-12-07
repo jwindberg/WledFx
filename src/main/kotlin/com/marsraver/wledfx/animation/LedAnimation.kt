@@ -246,5 +246,12 @@ interface LedAnimation {
     fun setPeakDetect(enabled: Boolean) {
         // Default implementation does nothing
     }
+
+    /**
+     * Indicates whether this animation reacts to audio input (loudness or FFT).
+     *
+     * Default is false; audio-reactive animations should override and return true.
+     */
+    fun isAudioReactive(): Boolean = false
 }
 

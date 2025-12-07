@@ -2,13 +2,7 @@ package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
 
-import com.marsraver.wledfx.audio.AudioPipeline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.marsraver.wledfx.audio.FftMeter
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -28,16 +22,15 @@ class GeqAnimation : LedAnimation {
     private var intensity: Int = 128
     private var colorBars: Boolean = false
     private val peakColor = RgbColor.WHITE
-    private var noiseFloor: Int = 50
+    // Lower noiseFloor for better sensitivity at normal listening levels
+    private var noiseFloor: Int = 20
     private var maxFFTValue: Int = 255
 
     private lateinit var previousBarHeight: IntArray
     private var lastRippleTime: Long = 0
     private var callCount: Long = 0
-
-    private val fftResult = IntArray(16)
-    private val spectrumLock = Any()
-    private var audioScope: CoroutineScope? = null
+    
+    private var fftMeter: FftMeter? = null
 
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
@@ -46,26 +39,15 @@ class GeqAnimation : LedAnimation {
         previousBarHeight = IntArray(combinedWidth)
         lastRippleTime = 0
         callCount = 0
-        audioScope?.cancel()
-        audioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope ->
-            scope.launch {
-                AudioPipeline.spectrumFlow(bands = 16).collectLatest { spectrum ->
-                    synchronized(spectrumLock) {
-                        val bands = spectrum.bands
-                        for (i in fftResult.indices) {
-                            val incoming = bands.getOrNull(i) ?: 0
-                            fftResult[i] = ((fftResult[i] * 3) + incoming) / 4
-                        }
-                    }
-                }
-            }
-        }
+        // Use 16 bands for GEQ visualization; FftMeter will normalize per-band over recent history
+        fftMeter = FftMeter(bands = 16)
     }
 
     override fun update(now: Long): Boolean {
         callCount++
 
-        val spectrumSnapshot = synchronized(spectrumLock) { fftResult.clone() }
+        // Use normalized bands so each band spans 0-255 relative to recent history
+        val spectrumSnapshot = fftMeter?.getNormalizedBands() ?: IntArray(16)
 
         var rippleTime = false
         var rippleInterval = 256 - intensity
@@ -94,16 +76,12 @@ class GeqAnimation : LedAnimation {
 
             var colorIndex = band * 17
             val bandValue = spectrumSnapshot.getOrElse(band) { 0 }
-            val adjustedFFT = max(0, bandValue - noiseFloor)
-            val boostedFFT = adjustedFFT * 2
-            val effectiveMax = maxFFTValue - noiseFloor
 
-            var barHeight = 0
-            if (boostedFFT > 0) {
-                val cappedBoosted = min(boostedFFT, effectiveMax)
-                barHeight = mapValue(cappedBoosted, 0, effectiveMax, 0, combinedHeight)
-                barHeight = barHeight.coerceIn(0, combinedHeight)
-            }
+            // Simple mapping: normalized bandValue (0-255) directly to bar height
+            // Small noise floor so quiet music still shows bars
+            val effectiveValue = max(0, bandValue - noiseFloor)
+            var barHeight = mapValue(effectiveValue, 0, 255 - noiseFloor, 0, combinedHeight)
+            barHeight = barHeight.coerceIn(0, combinedHeight)
 
             if (barHeight > previousBarHeight[x]) {
                 previousBarHeight[x] = barHeight
@@ -139,6 +117,8 @@ class GeqAnimation : LedAnimation {
 
     override fun getName(): String = "GEQ"
 
+    override fun isAudioReactive(): Boolean = true
+
     override fun supportsSpeed(): Boolean = true
 
     override fun setSpeed(speed: Int) {
@@ -150,11 +130,8 @@ class GeqAnimation : LedAnimation {
     }
 
     override fun cleanup() {
-        audioScope?.cancel()
-        audioScope = null
-        synchronized(spectrumLock) {
-            fftResult.fill(0)
-        }
+        fftMeter?.stop()
+        fftMeter = null
     }
 
     private fun mapValue(value: Int, inMin: Int, inMax: Int, outMin: Int, outMax: Int): Int {
