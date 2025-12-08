@@ -13,6 +13,7 @@ class CylonAnimation : StrandAnimation {
     private val redPixel = RgbColor.RED
     private var position = 0
     private var direction = 1
+    private var width = 5
 
     override fun init(strand: Strand) {
         // Initialize: reset position and direction
@@ -21,17 +22,26 @@ class CylonAnimation : StrandAnimation {
     }
 
     override fun draw(strand: Strand) {
-        // Draw: clear and set the current position
+        // Draw: clear and set a group of pixels at the current position
         strand.clear()
-        strand.set(position, redPixel)
+        
+        // Draw width number of pixels starting at position
+        for (i in 0 until width) {
+            val pixelIndex = position + i
+            if (pixelIndex < strand.length) {
+                strand.set(pixelIndex, redPixel)
+            }
+        }
 
         // Update position for next frame
         position += direction
         
-        // Reverse direction at boundaries (Kotlin idiom: coerceIn for clamping)
-        if (position >= strand.length - 1 || position <= 0) {
+        // Reverse direction at boundaries
+        // Check if the group would go out of bounds
+        if (position + width - 1 >= strand.length || position <= 0) {
             direction = -direction
-            position = position.coerceIn(0, strand.length - 1)
+            // Clamp position to keep the group within bounds
+            position = position.coerceIn(0, strand.length - width)
         }
     }
 }

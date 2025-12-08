@@ -52,6 +52,46 @@ object ColorUtils {
     }
 
     /**
+     * Convert RGB color to HSV color.
+     *
+     * @param color RGB color to convert
+     * @return HSV color representation
+     */
+    fun rgbToHsv(color: RgbColor): HsvColor {
+        // Normalize RGB values to 0.0-1.0
+        val rNorm = color.r / 255.0f
+        val gNorm = color.g / 255.0f
+        val bNorm = color.b / 255.0f
+
+        val max = maxOf(rNorm, gNorm, bNorm)
+        val min = minOf(rNorm, gNorm, bNorm)
+        val delta = max - min
+
+        // Calculate value (brightness)
+        val v = max
+
+        // Calculate saturation
+        val s = if (max > 0.0f) delta / max else 0.0f
+
+        // Calculate hue
+        val h = when {
+            delta == 0.0f -> 0.0f // Undefined, but use 0
+            max == rNorm -> {
+                val hRaw = 60.0f * (((gNorm - bNorm) / delta) % 6.0f)
+                if (hRaw < 0) hRaw + 360.0f else hRaw
+            }
+            max == gNorm -> 60.0f * (((bNorm - rNorm) / delta) + 2.0f)
+            else -> 60.0f * (((rNorm - gNorm) / delta) + 4.0f)
+        }
+
+        return HsvColor(
+            h.coerceIn(0.0f, 360.0f),
+            s.coerceIn(0.0f, 1.0f),
+            v.coerceIn(0.0f, 1.0f)
+        )
+    }
+
+    /**
      * Convert HSV to RGB color (float version).
      *
      * @param h hue in degrees (0-360)

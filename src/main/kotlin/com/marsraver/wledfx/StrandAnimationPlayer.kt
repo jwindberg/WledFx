@@ -1,6 +1,11 @@
 package com.marsraver.wledfx
 
 import com.marsraver.wledfx.strandanimation.CandyCaneAnimation
+import com.marsraver.wledfx.strandanimation.ChristmasStrandAnimation
+import com.marsraver.wledfx.strandanimation.ColorWheelAnimation
+import com.marsraver.wledfx.strandanimation.CylonAnimation
+import com.marsraver.wledfx.strandanimation.FftAnimation
+import com.marsraver.wledfx.strandanimation.PaletteStrandAnimation
 import com.marsraver.wledfx.wled.WledClient
 import com.marsraver.wledfx.wled.WledDdpClient
 import com.marsraver.wledfx.wled.model.Strand
@@ -19,8 +24,8 @@ class StrandAnimationPlayer {
 //        private const val IP_ADDRESS = "192.168.7.170"
 //        private const val NUM_LEDS =  512
 
-        private const val IP_ADDRESS = "192.168.7.113"
-        private const val NUM_LEDS =  256
+        private const val IP_ADDRESS = "192.168.7.231"
+//        private const val NUM_LEDS =  256
 
         @JvmStatic
         fun main(args: Array<String>) {
@@ -31,14 +36,17 @@ class StrandAnimationPlayer {
                 // Step 1: Create WledClient to get device info
                 val client = WledClient(IP_ADDRESS)
                 val info = client.getInfo()
+
+                val numLeds: Int = info.leds?.count ?: 0;
+
                 println("Connected! Device: ${info.name}")
-                println("Total LEDs: ${info.leds?.count ?: NUM_LEDS}")
+                println("Total LEDs: ${info.leds?.count ?: numLeds}")
 
                 // Step 2: Create WledDdpClient with the device info
                 val ddpClient = WledDdpClient(info)
 
                 // Step 3: Create the Strand with the animation
-                strand = Strand(NUM_LEDS, ddpClient, CandyCaneAnimation())
+                strand = Strand(numLeds, ddpClient, CandyCaneAnimation())
                 
                 // Add shutdown hook to ensure cleanup on Ctrl+C
                 val shutdownHook = Thread {

@@ -21,17 +21,19 @@ class AkemiAnimation : LedAnimation {
     private var colorSpeed: Int = 128
     private var intensity: Int = 128
 
+    private val numBands: Int = 16
+
     override fun init(combinedWidth: Int, combinedHeight: Int) {
         this.combinedWidth = combinedWidth
         this.combinedHeight = combinedHeight
         pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
         // Use 16 bands for side GEQ bars
-        fftMeter = FftMeter(bands = 16)
+        fftMeter = FftMeter(bands = numBands)
     }
 
     override fun update(now: Long): Boolean {
         // Use normalized bands for better sensitivity across different volumes
-        val spectrumSnapshot = fftMeter?.getNormalizedBands() ?: IntArray(16)
+        val spectrumSnapshot = fftMeter?.getNormalizedBands() ?: IntArray(numBands)
         val timeMs = now / 1_000_000L
         val speedFactor = (colorSpeed shr 2) + 2
         var counter = ((timeMs * speedFactor) and 0xFFFF).toInt()

@@ -43,5 +43,20 @@ data class Palette(
         val index = (pos * colors.size).toInt().coerceIn(0, colors.size - 1)
         return colors[index]
     }
+
+    companion object {
+        /**
+         * Returns a randomly selected palette from all available palettes.
+         * @return a randomly selected Palette
+         */
+        fun getRandom(): Palette {
+            val allPalettes = Palettes.all.values.toList()
+            return if (allPalettes.isNotEmpty()) {
+                allPalettes.random()
+            } else {
+                Palettes.getDefault()
+            }
+        }
+    }
 }
 

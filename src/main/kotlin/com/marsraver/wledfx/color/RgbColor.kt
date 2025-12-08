@@ -21,6 +21,14 @@ data class RgbColor(
     fun toIntArray(): IntArray = intArrayOf(r, g, b)
 
     /**
+     * Convert RGB color to HSV color.
+     * @return HSV color representation
+     */
+    fun toHsv(): HsvColor {
+        return ColorUtils.rgbToHsv(this)
+    }
+
+    /**
      * Create from IntArray (for backward compatibility).
      */
     companion object {

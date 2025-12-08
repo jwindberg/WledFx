@@ -107,11 +107,11 @@ tasks.register('scanWled', JavaExec) {
 }
 
 // Add task for running WLED client demo
-tasks.register('runDemo', JavaExec) {
+tasks.register('runStrand', JavaExec) {
     group = 'application'
-    description = 'Runs the WLED client demo (red dot animation on Grid00)'
+    description = 'Runs the StandAnimationPlayer with one animation'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.marsraver.wledfx.WledClientDemo'
+    mainClass = 'com.marsraver.wledfx.StrandAnimationPlayer'
 }
 
 // Add task for printing audio volume
