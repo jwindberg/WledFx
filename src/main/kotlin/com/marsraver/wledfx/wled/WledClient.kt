@@ -94,6 +94,26 @@ class WledClient(private val ipAddress: String) {
         }
     }
 
+    @Throws(Exception::class)
+    fun getEffects(): JsonNode {
+        val url = URI("http://$ipAddress/json/eff").toURL()
+        val conn = url.openConnection() as HttpURLConnection
+        conn.connectTimeout = 2000
+        conn.readTimeout = 3000
+        conn.requestMethod = "GET"
+
+        if (conn.responseCode != HttpURLConnection.HTTP_OK) {
+            conn.disconnect()
+            throw Exception("Failed to get effects: HTTP ${conn.responseCode}")
+        }
+
+        conn.inputStream.use { input ->
+            val node = mapper.readTree(input)
+            conn.disconnect()
+            return node
+        }
+    }
+
     fun getIpAddress(): String = ipAddress
 
     companion object {

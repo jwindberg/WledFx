@@ -65,6 +65,8 @@ class WledSimulatorApp : Application() {
     private var animationTimer: AnimationTimer? = null
     private var currentAnimation: LedAnimation? = null
     private val running = AtomicBoolean(false)
+    private var isUpdatingFilter = false  // Guard flag to prevent recursive filter updates
+    private var isProgrammaticChange = false  // Flag to prevent setOnAction during programmatic value changes
     private val animationColorStates = mutableMapOf<String, com.marsraver.wledfx.color.RgbColor>()  // Store color state per animation
     private val animationPaletteStates = mutableMapOf<String, String>()  // Store palette state per animation
     private lateinit var startButton: Button
@@ -93,6 +95,12 @@ class WledSimulatorApp : Application() {
     private lateinit var puddlesPeakCheckBox: CheckBox
     private lateinit var audioIndicatorLabel: Label
     private var lastRandomSwitchNs: Long = 0L
+    
+    // Filter checkboxes
+    private lateinit var filterAudioCheckBox: CheckBox
+    private lateinit var filterNonAudioCheckBox: CheckBox
+    private lateinit var filter2DCheckBox: CheckBox
+    private lateinit var filter1DCheckBox: CheckBox
 
     private val combinedWidth = VIRTUAL_GRID_WIDTH
     private val combinedHeight = VIRTUAL_GRID_HEIGHT
@@ -115,16 +123,45 @@ class WledSimulatorApp : Application() {
             }
         }
 
+        // Filter checkboxes
+        filterAudioCheckBox = CheckBox("Audio").apply {
+            isSelected = true
+            setOnAction { updateFilteredAnimations() }
+        }
+        
+        filterNonAudioCheckBox = CheckBox("Non-Audio").apply {
+            isSelected = true
+            setOnAction { updateFilteredAnimations() }
+        }
+        
+        filter2DCheckBox = CheckBox("2D").apply {
+            isSelected = true
+            setOnAction { updateFilteredAnimations() }
+        }
+        
+        filter1DCheckBox = CheckBox("1D").apply {
+            isSelected = true
+            setOnAction { updateFilteredAnimations() }
+        }
+        
         animationComboBox = ComboBox<String>().apply {
-            val animationNames = AnimationRegistry.getNames()
+            val animationNames = getFilteredAnimations().toMutableList()
+            animationNames.add(0, "None")
             items.addAll(animationNames)
-            value = animationNames.firstOrNull() ?: ""
+            value = "None"
             isDisable = true
             setOnAction {
+                // Skip if this is a programmatic change (from filter update)
+                if (isProgrammaticChange) return@setOnAction
+                
+                // Only switch animation if we are currently running
                 if (running.get()) {
                     stopAnimation()
-                    startSelectedAnimation()
-                    startButton.text = "Stop Animation"
+                    // Defer start to ensuer clean state transition
+                    Platform.runLater {
+                        startSelectedAnimation()
+                        startButton.text = "Stop Animation"
+                    }
                 }
             }
             valueProperty().addListener { _, _, newValue ->
@@ -286,6 +323,16 @@ class WledSimulatorApp : Application() {
             style = "-fx-font-size: 16px;"
         }
         
+        val filterBox = HBox(10.0,
+            Label("Filter:"),
+            filterAudioCheckBox,
+            filterNonAudioCheckBox,
+            filter2DCheckBox,
+            filter1DCheckBox
+        ).apply {
+            padding = Insets(5.0, 10.0, 5.0, 10.0)
+        }
+        
         val controlsBox = HBox(10.0,
             statusLabel,
             retryButton,
@@ -307,7 +354,7 @@ class WledSimulatorApp : Application() {
             padding = Insets(10.0)
         }
         
-        val mainContent = VBox(10.0, controlsBox, canvas, colorPaletteBox)
+        val mainContent = VBox(10.0, filterBox, controlsBox, canvas, colorPaletteBox)
         val root = BorderPane()
         root.center = mainContent
         // Candle multi-mode checkbox
@@ -373,8 +420,19 @@ class WledSimulatorApp : Application() {
 
         primaryStage.setOnCloseRequest {
             stopAnimation()
+            
+            // Send black frames to clear WLED state before disconnect
+            // This prevents panels from retaining old frame data
             devices.forEach { connection ->
-                sendBlackFrame(connection)
+                try {
+                    sendBlackFrame(connection)
+                } catch (e: Exception) {
+                    // Ignore errors during shutdown
+                }
+            }
+            
+            // Disconnect from all panels
+            devices.forEach { connection ->
                 connection.artNetClient.disconnect()
             }
             println("Disconnected from all WLED devices")
@@ -397,6 +455,7 @@ class WledSimulatorApp : Application() {
                     val height = info.leds?.matrix?.h ?: deviceConfig.logicalHeight
 
                     println("Connected! Device: ${info.name}")
+                    println("WLED Version: ${info.ver} (${info.fxcount} effects, ${info.palcount} palettes)")
                     println("Matrix size: ${width}x$height")
                     println("Total LEDs: ${info.leds?.count}")
 
@@ -690,7 +749,7 @@ class WledSimulatorApp : Application() {
                 }
 
                 try {
-                    devices.forEach { device ->
+                    devices.forEachIndexed { index, device ->
                         val deviceLeds = device.width * device.height
                         val rgbData = IntArray(deviceLeds * 3)
                         
@@ -727,6 +786,11 @@ class WledSimulatorApp : Application() {
                         }
 
                         device.artNetClient.sendRgb(rgbData, deviceLeds)
+                        
+                        // Small delay between panels to prevent network congestion
+                        if (index < devices.size - 1) {
+                            // Thread.sleep(1)
+                        }
                     }
 
 
@@ -948,6 +1012,68 @@ class WledSimulatorApp : Application() {
             randomIntervalField.text = sanitized.roundToInt().toString()
         }
     }
+    
+    private fun getFilteredAnimations(): List<String> {
+        val allAnimations = AnimationRegistry.getNames()
+        
+        return allAnimations.filter { name ->
+            if (name == "None") return@filter false // Handle None separately
+            
+            val animation = AnimationRegistry.create(name) ?: return@filter false
+            
+            // Check audio filter
+            val isAudioReactive = animation.isAudioReactive()
+            val audioMatch = (filterAudioCheckBox.isSelected && isAudioReactive) ||
+                           (filterNonAudioCheckBox.isSelected && !isAudioReactive)
+            
+            if (!audioMatch) {
+                animation.cleanup()
+                return@filter false
+            }
+            
+            // Check 2D/1D filter
+            // Classify animations as 1D or 2D based on their characteristics
+            val is1DEffect = name in listOf("Meteor", "Comet")
+            val is2D = !is1DEffect
+            val dimensionMatch = (filter2DCheckBox.isSelected && is2D) ||
+                                (filter1DCheckBox.isSelected && is1DEffect)
+            
+            animation.cleanup()
+            dimensionMatch
+        }
+    }
+    
+    private fun updateFilteredAnimations() {
+        val currentSelection = animationComboBox.value
+        val filteredAnimations = getFilteredAnimations().toMutableList()
+        val wasRunning = running.get()
+        
+        // Always add "None" option at the beginning
+        filteredAnimations.add(0, "None")
+        
+        Platform.runLater {
+            animationComboBox.items.clear()
+            animationComboBox.items.addAll(filteredAnimations)
+            
+            // Determine new selection
+            val newSelection = if (filteredAnimations.contains(currentSelection)) {
+                currentSelection
+            } else {
+                "None"
+            }
+            
+            // Only set flag if selection is NOT changing
+            // If selection changes, we WANT setOnAction to fire
+            if (newSelection == currentSelection) {
+                isProgrammaticChange = true
+            }
+            
+            animationComboBox.value = newSelection
+            
+            // Reset flag
+            isProgrammaticChange = false
+        }
+    }
 
     private fun randomIntervalSeconds(): Double {
         val value = randomIntervalField.text.toDoubleOrNull()
@@ -965,7 +1091,8 @@ class WledSimulatorApp : Application() {
 
     private fun handleRandomSelection(now: Long) {
         if (!randomCheckBox.isSelected) return
-        val items = animationComboBox.items
+        // Use filtered animations for random selection
+        val items = getFilteredAnimations()
         if (items.isEmpty()) return
 
         val intervalSeconds = randomIntervalSeconds()
@@ -991,7 +1118,7 @@ class WledSimulatorApp : Application() {
 
     companion object {
         private const val CELL_SIZE = 10.0
-        private const val FPS = 60
+        private const val FPS = 30  // Reduced from 60 to prevent UDP buffer buildup
         private const val FRAME_INTERVAL_NS = 1_000_000_000L / FPS
         private const val DEFAULT_LAYOUT_RESOURCE = "layouts/four_grid.json"
         private const val FALLBACK_GRID_WIDTH = 32
@@ -1028,6 +1155,32 @@ class WledSimulatorApp : Application() {
         
         private fun querySyncSettings(devices: Array<DeviceConfig>) {
             println("\n========== Querying Sync/DMX Settings ==========")
+            
+            // Query effects list from first device only (all devices should have same effects)
+            if (devices.isNotEmpty()) {
+                try {
+                    val firstDevice = devices[0]
+                    println("\n--- Effects List from ${firstDevice.name} ---")
+                    val client = WledClient(firstDevice.ip)
+                    val effects = client.getEffects()
+                    
+                    // The effects endpoint returns an array of effect names
+                    if (effects.isArray) {
+                        println("Total effects: ${effects.size()}")
+                        // Find DJ Light
+                        effects.forEachIndexed { index, effect ->
+                            val effectName = effect.asText()
+                            if (effectName.contains("DJ", ignoreCase = true) || 
+                                effectName.contains("Light", ignoreCase = true)) {
+                                println("  Effect #$index: $effectName")
+                            }
+                        }
+                    }
+                } catch (ex: Exception) {
+                    println("Failed to query effects: ${ex.message}")
+                }
+            }
+            
             for (deviceConfig in devices) {
                 try {
                     println("\n--- ${deviceConfig.name} (${deviceConfig.ip}) ---")

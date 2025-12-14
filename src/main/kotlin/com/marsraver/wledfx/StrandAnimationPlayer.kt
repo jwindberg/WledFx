@@ -5,6 +5,7 @@ import com.marsraver.wledfx.strandanimation.ChristmasStrandAnimation
 import com.marsraver.wledfx.strandanimation.ColorWheelAnimation
 import com.marsraver.wledfx.strandanimation.CylonAnimation
 import com.marsraver.wledfx.strandanimation.FftAnimation
+import com.marsraver.wledfx.strandanimation.FireworksAnimation
 import com.marsraver.wledfx.strandanimation.PaletteStrandAnimation
 import com.marsraver.wledfx.wled.WledClient
 import com.marsraver.wledfx.wled.WledDdpClient
@@ -21,10 +22,10 @@ import com.marsraver.wledfx.wled.model.Strand
 class StrandAnimationPlayer {
     companion object {
 
-//        private const val IP_ADDRESS = "192.168.7.170"
+        private const val IP_ADDRESS = "192.168.7.170"
 //        private const val NUM_LEDS =  512
 
-        private const val IP_ADDRESS = "192.168.7.231"
+//        private const val IP_ADDRESS = "192.168.7.231"
 //        private const val NUM_LEDS =  256
 
         @JvmStatic
@@ -46,7 +47,7 @@ class StrandAnimationPlayer {
                 val ddpClient = WledDdpClient(info)
 
                 // Step 3: Create the Strand with the animation
-                strand = Strand(numLeds, ddpClient, CandyCaneAnimation())
+                strand = Strand(numLeds, ddpClient, FireworksAnimation())
                 
                 // Add shutdown hook to ensure cleanup on Ctrl+C
                 val shutdownHook = Thread {

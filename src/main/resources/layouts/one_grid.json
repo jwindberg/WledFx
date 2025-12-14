@@ -1,0 +1,23 @@
+{
+    "panels": [
+        {
+            "name": "Grid00",
+            "ip": "192.168.7.113",
+            "position": {
+                "x": 0,
+                "y": 0
+            },
+            "size": {
+                "width": 16,
+                "height": 16
+            },
+            "startCorner": "bottom-left",
+            "order": "column-major",
+            "serpentine": true
+        }
+    ],
+    "virtualGrid": {
+        "width": 16,
+        "height": 16
+    }
+}
