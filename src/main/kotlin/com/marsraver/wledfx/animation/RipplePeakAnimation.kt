@@ -1,20 +1,19 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import com.marsraver.wledfx.audio.FftMeter
+import com.marsraver.wledfx.math.MathUtils
+import java.util.Random
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.log10
-import kotlin.math.roundToInt
-import java.util.Random
 
 /**
  * Ripple Peak animation - Audio-reactive ripples that expand from points when peaks are detected
  * By: Andrew Tuline
  */
-class RipplePeakAnimation : LedAnimation {
+class RipplePeakAnimation : BaseAnimation() {
 
     private data class Ripple(
         var posX: Int,
@@ -23,57 +22,32 @@ class RipplePeakAnimation : LedAnimation {
         var color: Int
     )
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
     private val ripples = mutableListOf<Ripple>()
-    private var currentPalette: Palette? = null
     
-    private var intensity: Int = 128  // Controls max number of ripples (intensity/16)
-    private var custom1: Int = 0      // Select bin (not used in 2D adaptation)
+    // Internal parameters
     private var custom2: Int = 0      // Volume threshold (min)
     
     private var fftMeter: FftMeter? = null
-    @Volatile
-    private var samplePeak: Boolean = false
-    @Volatile
-    private var fftMajorPeak: Float = 0.0f
-    @Volatile
-    private var maxVol: Int = 0
     private var startTimeNs: Long = 0L
     private val random = Random()
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         ripples.clear()
         startTimeNs = System.nanoTime()
+        paramSpeed = 128
+        paramIntensity = 128
         
-        samplePeak = false
-        fftMajorPeak = 0.0f
-        maxVol = 0
-        
-        // Use 32 bands for peak detection and frequency estimation
+        // Use 32 bands for peak detection
         fftMeter = FftMeter(bands = 32)
     }
 
     override fun update(now: Long): Boolean {
-        // Fade out (called twice in original for lower frame rate)
+        // Fade out
         fadeOut(240)
         fadeOut(240)
         
-        // Use FftMeter for peaks, major frequency and volume
         val bands = fftMeter?.getNormalizedBands() ?: IntArray(32)
         val maxValue = bands.maxOrNull() ?: 0
         val totalMagnitude = bands.sum()
@@ -81,80 +55,70 @@ class RipplePeakAnimation : LedAnimation {
         
         val threshold = if (custom2 > 0) custom2 else 50
         val peak = maxValue > threshold
-        val vol = (totalMagnitude / 16.0).toInt().coerceIn(0, 255)
         
-        val maxRipples = (intensity / 16).coerceAtLeast(1)
+        // Max ripples based on intensity
+        val maxRipples = (paramIntensity / 16).coerceAtLeast(1)
         
-        // Limit ripples to maxRipples
         while (ripples.size > maxRipples) {
             ripples.removeAt(0)
         }
         
-        // Process each ripple
+        // Process ripples
         for (i in ripples.indices) {
             val ripple = ripples[i]
             
             when (ripple.state) {
-                254 -> {  // Inactive mode
-                    // Do nothing
-                }
+                254 -> { /* Inactive */ }
                 
-                255 -> {  // Initialize ripple variables
-                    // Random position in 2D space
-                    ripple.posX = random.nextInt(combinedWidth)
-                    ripple.posY = random.nextInt(combinedHeight)
+                255 -> { // Initialize
+                    ripple.posX = random.nextInt(width)
+                    ripple.posY = random.nextInt(height)
                     
-                    // Color based on FFT_MajorPeak (log10) or random
                     if (fftPeak > 1.0f) {
                         ripple.color = (log10(fftPeak.toDouble()) * 128.0).toInt().coerceIn(0, 255)
                     } else {
                         ripple.color = random.nextInt(256)
                     }
-                    
                     ripple.state = 0
                 }
                 
-                0 -> {  // Initial pixel
+                0 -> { // Initial pixel
                     val color = colorFromPalette(ripple.color, false, 0)
                     setPixelColor(ripple.posX, ripple.posY, color)
                     ripple.state++
                 }
                 
-                16 -> {  // At the end of the ripples
-                    ripple.state = 254  // Set to inactive
+                16 -> { // End of ripple
+                    ripple.state = 254
                 }
                 
-                else -> {  // Middle of the ripples - expand outward
+                else -> { // Expand
                     val brightness = (2 * 255 / ripple.state).coerceIn(0, 255)
                     val baseColor = colorFromPalette(ripple.color, false, 0)
                     val brightnessFactor = brightness / 255.0
                     val blendedColor = ColorUtils.scaleBrightness(baseColor, brightnessFactor)
                     
-                    // Expand in all directions (circular ripple for 2D)
                     val radius = ripple.state.toDouble()
-                    for (x in 0 until combinedWidth) {
-                        for (y in 0 until combinedHeight) {
+                    for (x in 0 until width) {
+                        for (y in 0 until height) {
                             val distance = hypot((x - ripple.posX).toDouble(), (y - ripple.posY).toDouble())
                             val diff = abs(distance - radius)
-                            if (diff < 0.5) {  // On the ripple ring
+                            if (diff < 0.5) {
                                 addPixelColor(x, y, blendedColor)
                             }
                         }
                     }
-                    
                     ripple.state++
                 }
             }
         }
         
-        // Create new ripple when peak is detected
         if (peak) {
-            // Find inactive ripple or create new one
             val inactiveRipple = ripples.find { it.state == 254 }
             if (inactiveRipple != null) {
-                inactiveRipple.state = 255  // Will initialize on next update
+                inactiveRipple.state = 255
             } else if (ripples.size < maxRipples) {
-                ripples.add(Ripple(0, 0, 255, 0))  // Will initialize on next update
+                ripples.add(Ripple(0, 0, 255, 0))
             }
         }
         
@@ -162,7 +126,7 @@ class RipplePeakAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -170,8 +134,10 @@ class RipplePeakAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Ripple Peak"
-
     override fun isAudioReactive(): Boolean = true
+    override fun supportsIntensity(): Boolean = true
+
+    fun setCustom2(value: Int) { this.custom2 = value.coerceIn(0, 255) }
 
     override fun cleanup() {
         fftMeter?.stop()
@@ -180,21 +146,21 @@ class RipplePeakAnimation : LedAnimation {
 
     private fun fadeOut(amount: Int) {
         val factor = (255 - amount).coerceIn(0, 255) / 255.0
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y] = color
         }
     }
 
     private fun addPixelColor(x: Int, y: Int, color: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             val current = pixelColors[x][y]
             pixelColors[x][y] = RgbColor(
                 (current.r + color.r).coerceAtMost(255),
@@ -205,21 +171,8 @@ class RipplePeakAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(index: Int, wrap: Boolean, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = if (wrap) {
-                (index % 256) * currentPalette.size / 256
-            } else {
-                ((index % 256) * currentPalette.size / 256).coerceIn(0, currentPalette.size - 1)
-            }
-            val baseColor = currentPalette[paletteIndex.coerceIn(0, currentPalette.size - 1)]
-            val brightnessFactor = if (brightness > 0) brightness / 255.0 else 1.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            // Fallback to HSV if no palette
-            return ColorUtils.hsvToRgb(index, 255, if (brightness > 0) brightness else 255)
-        }
+        val base = getColorFromPalette(index)
+        val brightnessFactor = if (brightness > 0) brightness / 255.0 else 1.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
     }
 }
-
-

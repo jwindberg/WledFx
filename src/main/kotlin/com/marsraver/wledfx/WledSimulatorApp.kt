@@ -1031,12 +1031,13 @@ class WledSimulatorApp : Application() {
                 return@filter false
             }
             
-            // Check 2D/1D filter
             // Classify animations as 1D or 2D based on their characteristics
-            val is1DEffect = name in listOf("Meteor", "Comet")
-            val is2D = !is1DEffect
+            // An animation can be BOTH 1D and 2D (e.g. None)
+            val is1D = animation.is1D()
+            val is2D = animation.is2D()
+            
             val dimensionMatch = (filter2DCheckBox.isSelected && is2D) ||
-                                (filter1DCheckBox.isSelected && is1DEffect)
+                                (filter1DCheckBox.isSelected && is1D)
             
             animation.cleanup()
             dimensionMatch

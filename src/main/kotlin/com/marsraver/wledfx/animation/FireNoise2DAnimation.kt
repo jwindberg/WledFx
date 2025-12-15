@@ -2,7 +2,7 @@ package com.marsraver.wledfx.animation
 
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
+import com.marsraver.wledfx.math.MathUtils
 import kotlin.math.min
 
 /**
@@ -11,17 +11,10 @@ import kotlin.math.min
  * 
  * Original C code from WLED v0.15.3 FX.cpp line 5045
  */
-class FireNoise2DAnimation : LedAnimation {
+class FireNoise2DAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
-    private var currentPalette: Palette? = null
     private var startTimeNs: Long = 0L
-    
-    private var speed: Int = 128  // Y scale
-    private var intensity: Int = 128  // X scale
-    private var usePalette: Boolean = false
     
     // Fire palette colors
     private val firePalette = listOf(
@@ -31,42 +24,46 @@ class FireNoise2DAnimation : LedAnimation {
         RgbColor(255, 255, 0), RgbColor(255, 165, 0), RgbColor(255, 255, 0), RgbColor(255, 255, 0)
     )
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-        usePalette = true
-    }
-
-    override fun getPalette(): Palette? = currentPalette
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         startTimeNs = System.nanoTime()
+        paramSpeed = 128
+        paramIntensity = 128
     }
 
     override fun update(now: Long): Boolean {
         if (startTimeNs == 0L) startTimeNs = now
         
         val timeMs = (now - startTimeNs) / 1_000_000
-        val xscale = intensity * 4
-        val yscale = speed * 8
+        val xscale = paramIntensity * 4
+        val yscale = paramSpeed * 8
         
-        for (j in 0 until combinedWidth) {
-            for (i in 0 until combinedHeight) {
-                val indexx = inoise8(j * yscale * combinedHeight / 255, i * xscale + timeMs / 4)
+        for (j in 0 until width) {
+            for (i in 0 until height) {
+                // Use MathUtils.inoise8
+                val indexx = MathUtils.inoise8(j * yscale * height / 255, (i * xscale + timeMs / 4).toInt())
                 val paletteIndex = min(i * (indexx shr 4), 255)
-                val brightness = i * 255 / combinedWidth
+                val brightness = i * 255 / width
                 
-                val paletteToUse = if (usePalette && currentPalette != null) {
-                    currentPalette!!.colors.toList()
+                // If paramPalette is set, use it. Otherwise use firePalette.
+                // Note: getColorFromPalette logic in BaseAnimation handles palette vs HSV, but we want custom fallback here?
+                // Actually BaseAnimation.getColorFromPalette falls back to HSV rainbow.
+                // We want to fall back to FirePalette if no Palette is set.
+                
+                // However, paramPalette updates when setPalette is called.
+                // If paramPalette is null, use firePalette.
+                
+                pixelColors[j][i] = if (paramPalette != null) {
+                    getColorFromPalette((paletteIndex * 256 / 255)) // scaling?
+                    // Re-implement colorFromPalette logic slightly modified
+                     val p = paramPalette!!.colors
+                     val pIdx = ((paletteIndex.coerceIn(0, 255)) * p.size / 256).coerceIn(0, p.size - 1)
+                     ColorUtils.scaleBrightness(p[pIdx], brightness / 255.0)
+
                 } else {
-                    firePalette
+                     val pIdx = ((paletteIndex % 256) * firePalette.size / 256).coerceIn(0, firePalette.size - 1)
+                     ColorUtils.scaleBrightness(firePalette[pIdx], brightness / 255.0)
                 }
-                
-                pixelColors[j][i] = colorFromPalette(paletteToUse, paletteIndex, brightness)
             }
         }
         
@@ -74,7 +71,7 @@ class FireNoise2DAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -82,27 +79,6 @@ class FireNoise2DAnimation : LedAnimation {
     }
 
     override fun getName(): String = "FireNoise2D"
-
     override fun isAudioReactive(): Boolean = false
-
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int = speed
-
-    override fun cleanup() {}
-    
-    private fun inoise8(x: Int, y: Long): Int {
-        val hash = ((x * 2654435761L + y * 2246822519L) and 0xFFFFFFFF).toInt()
-        return (hash and 0xFF)
-    }
-    
-    private fun colorFromPalette(palette: List<RgbColor>, index: Int, brightness: Int): RgbColor {
-        val paletteIndex = ((index % 256) * palette.size / 256).coerceIn(0, palette.size - 1)
-        val baseColor = palette[paletteIndex]
-        return ColorUtils.scaleBrightness(baseColor, brightness / 255.0)
-    }
+    override fun supportsIntensity(): Boolean = true
 }

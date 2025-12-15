@@ -122,12 +122,34 @@ interface LedAnimation {
         // Default implementation does nothing
     }
 
-    /**
-     * Get the current speed of the animation (if supported).
-     *
-     * @return speed value (0-255), or null if not supported
-     */
     fun getSpeed(): Int? {
+        // Default implementation returns null
+        return null
+    }
+
+    /**
+     * Check if this animation supports intensity control.
+     *
+     * @return true if the animation has an intensity parameter
+     */
+    fun supportsIntensity(): Boolean = false
+
+    /**
+     * Set the intensity for the animation (if supported).
+     * Intensity range is 0-255.
+     *
+     * @param intensity intensity value (0-255)
+     */
+    fun setIntensity(intensity: Int) {
+        // Default implementation does nothing
+    }
+
+    /**
+     * Get the current intensity of the animation (if supported).
+     *
+     * @return intensity value (0-255), or null if not supported
+     */
+    fun getIntensity(): Int? {
         // Default implementation returns null
         return null
     }
@@ -246,6 +268,22 @@ interface LedAnimation {
     fun setPeakDetect(enabled: Boolean) {
         // Default implementation does nothing
     }
+
+    /**
+     * Check if this animation is primarily a 1D effect (strip effect).
+     * Used for filtering in the UI.
+     * 
+     * @return true if this is a 1D effect being mapped to 2D
+     */
+    fun is1D(): Boolean = false
+
+    /**
+     * Check if this animation is primarily a 2D effect (matrix effect).
+     * Used for filtering in the UI.
+     * 
+     * @return true if this is a 2D effect
+     */
+    fun is2D(): Boolean = true
 
     /**
      * Indicates whether this animation reacts to audio input (loudness or FFT).

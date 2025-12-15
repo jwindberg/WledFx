@@ -1,18 +1,14 @@
 package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
  * Scrolling text animation rendered with a 5x7 bitmap font.
  */
-class ScrollingTextAnimation : LedAnimation {
+class ScrollingTextAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixels: Array<Array<RgbColor>>
 
     private var text: String = DEFAULT_TEXT
@@ -21,26 +17,14 @@ class ScrollingTextAnimation : LedAnimation {
     private var lastUpdateNanos: Long = 0L
     private var hueOffset: Int = 0
     private var speedFactor: Double = 1.0
-    private var currentPalette: Palette? = null
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixels = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        scrollOffset = combinedWidth.toDouble()
+    override fun onInit() {
+        pixels = Array(width) { Array(height) { RgbColor.BLACK } }
+        scrollOffset = width.toDouble()
         computeTextMetrics()
         lastUpdateNanos = System.nanoTime()
         hueOffset = 0
+        // speedFactor preserved or reset? 
         speedFactor = speedFactor.coerceIn(MIN_SPEED_FACTOR, 1.0)
     }
 
@@ -52,13 +36,21 @@ class ScrollingTextAnimation : LedAnimation {
 
         clear()
 
-        val scrollSpeed = BASE_SCROLL_SPEED * speedFactor * (combinedWidth / 16.0).coerceAtLeast(1.0)
+        // Use base paramSpeed if we want, but this has a specific speedFactor.
+        // We can link paramSpeed to speedFactor roughly?
+        // Or keep speedFactor separate.
+        val baseSpeed = BASE_SCROLL_SPEED * speedFactor * (width / 16.0).coerceAtLeast(1.0)
+        
+        // Apply paramSpeed influence? Default 128 = 1.0x?
+        // Let's leave it as is for now to avoid breaking existing users of speedFactor
+        
+        val scrollSpeed = baseSpeed
         scrollOffset -= scrollSpeed * (deltaMs / 16.0)
         if (scrollOffset < -totalTextWidth) {
-            scrollOffset = combinedWidth.toDouble()
+            scrollOffset = width.toDouble()
         }
 
-        val baseY = (combinedHeight - CHAR_HEIGHT) / 2
+        val baseY = (height - CHAR_HEIGHT) / 2
         val yStart = baseY.coerceAtLeast(0)
 
         hueOffset = (hueOffset + 1) and 0xFF
@@ -67,14 +59,20 @@ class ScrollingTextAnimation : LedAnimation {
         text.forEachIndexed { index, ch ->
             val pattern = FONT[ch] ?: FONT['?'] ?: return@forEachIndexed
             val hue = (hueOffset + index * 12) and 0xFF
+            // Use BaseAnimation color logic
+            // BaseAnimation palette logic handles the coloring.
+            // But here we need specific Hues for rainbow effect?
+            // HsvToRgb is used with Hue offset. 
+            // If user selects a palette, maybe use palette?
             val rgb = hsvToRgb(hue, 255, 255)
+            
             for (row in pattern.indices) {
                 val actualY = yStart + row
-                if (actualY !in 0 until combinedHeight) continue
+                if (actualY !in 0 until height) continue
                 val rowBits = pattern[row]
                 for (col in 0 until CHAR_WIDTH) {
                     val actualX = (currentX + col).roundToInt()
-                    if (actualX !in 0 until combinedWidth) continue
+                    if (actualX !in 0 until width) continue
                     if ((rowBits shr (CHAR_WIDTH - 1 - col)) and 1 == 1) {
                         pixels[actualX][actualY] = rgb
                     }
@@ -87,7 +85,7 @@ class ScrollingTextAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (::pixels.isInitialized && x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (::pixels.isInitialized && x in 0 until width && y in 0 until height) {
             pixels[x][y]
         } else {
             RgbColor.BLACK
@@ -115,8 +113,8 @@ class ScrollingTextAnimation : LedAnimation {
     }
 
     private fun clear() {
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixels[x][y] = RgbColor.BLACK
             }
         }
@@ -128,19 +126,14 @@ class ScrollingTextAnimation : LedAnimation {
         if (characterCount > 0) {
             totalTextWidth -= CHAR_SPACING
         }
-        scrollOffset = min(scrollOffset, combinedWidth.toDouble())
+        scrollOffset = min(scrollOffset, width.toDouble())
     }
 
     private fun hsvToRgb(hue: Int, saturation: Int, value: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = value / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            return ColorUtils.hsvToRgb(hue, saturation, value)
-        }
+        // Use BaseAnimation palette support
+        val base = getColorFromPalette(hue)
+        val brightnessFactor = value / 255.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
     }
 
     companion object {

@@ -184,5 +184,44 @@ object ColorUtils {
         val result = ((sine + 1.0) / 2.0 * 255.0).toInt()
         return result.coerceIn(0, 255)
     }
+    /**
+     * Approximates 'black body radiation' spectrum for a given heat level.
+     * 0 = black, 255 = white
+     */
+    fun heatColor(temperature: Int): RgbColor {
+        val t = temperature.coerceIn(0, 255)
+        
+        // Scale 'heat' down from 0-255 to 0-191,
+        // which can then be easily divided into three equal 'thirds' of 64 units each.
+        val t192 = (t * 191) / 255
+        
+        // Calculate ramp up from 0 to 255 in each 'third'
+        var heatramp = t192 and 0x3F // 0..63
+        heatramp = heatramp shl 2 // scale up to 0..252
+        
+        return if (t192 and 0x80 != 0) {
+            // Hot third
+            RgbColor(255, 255, heatramp) // Red + Green + Blue(ramp) -> White
+        } else if (t192 and 0x40 != 0) {
+            // Middle third
+            RgbColor(255, heatramp, 0) // Red + Green(ramp) -> Yellow
+        } else {
+            // Cool third
+            RgbColor(heatramp, 0, 0) // Red(ramp) -> Red
+        }
+    }
+    /**
+     * Fade a color to black by a fixed step amount.
+     * SUBTRACTS amount from each channel.
+     */
+    fun fade(color: RgbColor, amount: Int): RgbColor {
+        return RgbColor(
+            (color.r - amount).coerceAtLeast(0),
+            (color.g - amount).coerceAtLeast(0),
+            (color.b - amount).coerceAtLeast(0)
+        )
+    }
+    
+
 }
 

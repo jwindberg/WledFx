@@ -1,8 +1,6 @@
 package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -12,64 +10,56 @@ import kotlin.math.sin
  * Waving Cell animation - heat palette waves animated with sinusoidal motion.
  * Audio RMS drives palette energy and bloom.
  */
-class WavingCellAnimation : LedAnimation {
+class WavingCellAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private var timeValue: Double = 0.0
-    private var currentPalette: Palette? = null
 
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
+    override fun getName(): String = "Waving Cell"
+    override fun is1D(): Boolean = true
+    override fun is2D(): Boolean = true
+    override fun supportsPalette(): Boolean = true
+    override fun supportsColor(): Boolean = false
+    override fun getDefaultPaletteName(): String = "Heat"
+
+    override fun onInit() {
         timeValue = 0.0
     }
 
     override fun update(now: Long): Boolean {
-        // AnimationTimer supplies nanoseconds; convert to milliseconds before scaling.
         timeValue = now / 1_000_000.0 / 100.0
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) {
-            return RgbColor.BLACK
-        }
-
-        // Constant values for base animation (no audio reactivity)
+        // Constant values for base animation (no audio reactivity support in original class for update loop variable modification?)
+        // The comments say "audio rms drives palette energy..." but the code calculates `energy = 1.0` static.
+        // Assuming I should keep provided logic which was static.
+        
         val energy = 1.0
         val heatBoost = 0.0
         val brightnessScale = 1.0
 
         val t = timeValue
-        // Wave calculations - energy affects speed and amplitude
         val inner = sin8(y * 5 + t * 5.0 * energy)
         val wave = sin8(x * 10 + inner * energy)
         val vertical = cos8(y * 10.0 * energy)
         
-        // Combine wave components with energy and heatBoost
         var index = wave * energy + vertical * (0.7 + energy * 0.3) + t + heatBoost
         index = wrapToPaletteRange(index)
-        val color = colorFromPalette(index)
         
-        // Apply brightness scaling based on audio
+        // Use BaseAnimation palette
+        var color = getColorFromPalette(index.toInt())
+        
+        // Fallback or custom heat palette logic is not needed if Base provides Heat palette as default or user selected.
+        // But the original had a custom HEAT_PALETTE fallback when currentPalette was null.
+        // BaseAnimation defaults to Rainbow.
+        // Let's rely on BaseAnimation. If user wants Heat, they select Heat.
+        // Or if we want to enforce Heat as default?
+        // BaseAnimation has no way to enforce default palette currently without overriding onInit and setting it, if Base allowed setting "default".
+        // But Base just checks `palette != null`.
+        // We can just return the color from base.
+        
         return ColorUtils.scaleBrightness(color, brightnessScale)
-    }
-
-    override fun getName(): String = "Waving Cell"
-
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun cleanup() {
-        // No cleanup needed
     }
 
     private fun sin8(theta: Double): Double {
@@ -91,62 +81,4 @@ class WavingCellAnimation : LedAnimation {
         if (result < 0) result += 256.0
         return result
     }
-
-    private fun colorFromPalette(indexValue: Double): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            // Use the selected palette
-            val index = (indexValue.coerceIn(0.0, 255.0) / 255.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            return currentPalette[index]
-        } else {
-            // Fallback to heat palette if no palette is set
-            return colorFromHeatPalette(indexValue)
-        }
-    }
-
-    private fun colorFromHeatPalette(indexValue: Double): RgbColor {
-        val index = indexValue.coerceIn(0.0, 255.0)
-        var lower = HEAT_PALETTE.first()
-        var upper = HEAT_PALETTE.last()
-
-        for (entry in HEAT_PALETTE) {
-            if (entry.position <= index) {
-                lower = entry
-            }
-            if (entry.position >= index) {
-                upper = entry
-                break
-            }
-        }
-
-        if (lower === upper) {
-            return lower.color
-        }
-
-        val range = upper.position - lower.position
-        val fraction = if (range <= 0.0) 0.0 else (index - lower.position) / range
-        val r = lerp(lower.color.r, upper.color.r, fraction)
-        val g = lerp(lower.color.g, upper.color.g, fraction)
-        val b = lerp(lower.color.b, upper.color.b, fraction)
-        return RgbColor(r, g, b)
-    }
-
-    private fun lerp(start: Int, end: Int, fraction: Double): Int {
-        val value = start + (end - start) * fraction
-        return value.roundToInt().coerceIn(0, 255)
-    }
-
-    private data class PaletteEntry(val position: Double, val color: RgbColor)
-
-    companion object {
-        private val HEAT_PALETTE = listOf(
-            PaletteEntry(0.0, RgbColor.BLACK),
-            PaletteEntry(48.0, RgbColor(48, 0, 0)),
-            PaletteEntry(96.0, RgbColor(128, 16, 0)),
-            PaletteEntry(160.0, RgbColor(255, 80, 0)),
-            PaletteEntry(224.0, RgbColor(255, 200, 0)),
-            PaletteEntry(255.0, RgbColor.WHITE),
-        )
-    }
 }
-

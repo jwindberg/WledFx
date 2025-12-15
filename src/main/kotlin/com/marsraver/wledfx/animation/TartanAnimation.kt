@@ -1,18 +1,15 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.PI
 
 /**
  * Tartan animation - animated plaid pattern using sine-based oscillations.
  */
-class TartanAnimation : LedAnimation {
-
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
+class TartanAnimation : BaseAnimation() {
 
     private var offsetX: Double = 0.0
     private var offsetY: Double = 0.0
@@ -20,27 +17,15 @@ class TartanAnimation : LedAnimation {
     private var hueBase: Int = 0
     private var hueAccumulatorMs: Double = 0.0
     private var lastUpdateNanos: Long = 0L
-    private var currentPalette: Palette? = null
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
+    override fun onInit() {
         offsetX = 0.0
         offsetY = 0.0
         horizontalScale = 1.0
         hueBase = 0
         hueAccumulatorMs = 0.0
         lastUpdateNanos = 0L
+        paramSpeed = 128
     }
 
     override fun update(now: Long): Boolean {
@@ -48,32 +33,44 @@ class TartanAnimation : LedAnimation {
             lastUpdateNanos = now
         }
         val deltaMs = (now - lastUpdateNanos) / 1_000_000.0
+        
+        // Use paramSpeed to influence hue change speed?
+        // Original: hardcoded 8.0 ms per increment.
+        val speedFactor = paramSpeed / 128.0
+        val incrementThreshold = 8.0 / speedFactor.coerceAtLeast(0.1)
+        
         hueAccumulatorMs += deltaMs
-        while (hueAccumulatorMs >= 8.0) {
+        while (hueAccumulatorMs >= incrementThreshold) {
             hueBase = (hueBase + 1) and 0xFF
-            hueAccumulatorMs -= 8.0
+            hueAccumulatorMs -= incrementThreshold
         }
         lastUpdateNanos = now
 
         val timeSeconds = now / 1_000_000_000.0
-        offsetX = beatsin(timeSeconds, 0.25, -180.0, 180.0)
-        offsetY = beatsin(timeSeconds, 0.18, -180.0, 180.0, phaseOffsetSeconds = 6.0)
-        horizontalScale = beatsin(timeSeconds, 0.35, 0.5, 4.0)
+        
+        // Original frequencies hardcoded in beatsin calls.
+        // We can scale them by paramSpeed too if desired.
+        val freqScale = paramSpeed / 128.0
+        
+        offsetX = beatsin(timeSeconds, 0.25 * freqScale, -180.0, 180.0)
+        offsetY = beatsin(timeSeconds, 0.18 * freqScale, -180.0, 180.0, phaseOffsetSeconds = 6.0)
+        horizontalScale = beatsin(timeSeconds, 0.35 * freqScale, 0.5, 4.0)
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) {
+        if (x !in 0 until width || y !in 0 until height) {
             return RgbColor.BLACK
         }
 
         val hueX = (x * horizontalScale + offsetY + hueBase).toFloat()
         val brightnessX = sin8(x * 18.0 + offsetX)
-        val colorX = hsvToRgb(hueX, 200, brightnessX)
+        // Use palette for hue
+        val colorX = getColorFromHue(hueX, brightnessX)
 
         val hueY = (y * 2.0 + offsetX + hueBase).toFloat()
         val brightnessY = sin8(y * 18.0 + offsetY)
-        val colorY = hsvToRgb(hueY, 200, brightnessY)
+        val colorY = getColorFromHue(hueY, brightnessY)
 
         return RgbColor(
             (colorX.r + colorY.r).coerceAtMost(255),
@@ -84,10 +81,6 @@ class TartanAnimation : LedAnimation {
 
     override fun getName(): String = "Tartan"
 
-    override fun cleanup() {
-        // No resources to release; provided for interface parity.
-    }
-
     private fun beatsin(
         timeSeconds: Double,
         frequencyHz: Double,
@@ -95,7 +88,7 @@ class TartanAnimation : LedAnimation {
         high: Double,
         phaseOffsetSeconds: Double = 0.0,
     ): Double {
-        val angle = 2.0 * Math.PI * (frequencyHz * (timeSeconds + phaseOffsetSeconds))
+        val angle = 2.0 * PI * (frequencyHz * (timeSeconds + phaseOffsetSeconds))
         val sine = sin(angle)
         return low + (high - low) * (sine + 1.0) / 2.0
     }
@@ -103,25 +96,14 @@ class TartanAnimation : LedAnimation {
     private fun sin8(input: Double): Int {
         var angle = input % 256.0
         if (angle < 0) angle += 256.0
-        val radians = angle / 256.0 * 2.0 * Math.PI
+        val radians = angle / 256.0 * 2.0 * PI
         val sine = sin(radians)
         return ((sine + 1.0) * 127.5).roundToInt().coerceIn(0, 255)
     }
 
-    private fun hsvToRgb(hue: Float, saturation: Int, value: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val h = (hue % 256 + 256) % 256
-            val paletteIndex = (h / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = value / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            val h = (hue % 256 + 256) % 256
-            val s = saturation.coerceIn(0, 255) / 255.0f
-            val v = value.coerceIn(0, 255) / 255.0f
-            return ColorUtils.hsvToRgb(h * 360.0f / 255.0f, s, v)
-        }
+    private fun getColorFromHue(hue: Float, brightness: Int): RgbColor {
+        val h = (hue.toInt() % 256 + 256) % 256
+        val base = getColorFromPalette(h)
+        return ColorUtils.scaleBrightness(base, brightness / 255.0)
     }
 }
-

@@ -1,8 +1,8 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
+import com.marsraver.wledfx.math.MathUtils
 import kotlin.math.sin
 import kotlin.math.PI
 import kotlin.math.roundToInt
@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
  * Julia animation - Animated Julia set fractal
  * By: Andrew Tuline
  */
-class JuliaAnimation : LedAnimation {
+class JuliaAnimation : BaseAnimation() {
 
     private data class JuliaState(
         var xcen: Float = 0.0f,
@@ -19,13 +19,8 @@ class JuliaAnimation : LedAnimation {
         var xymag: Float = 1.0f
     )
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
-    private var currentPalette: Palette? = null
     
-    private var speed: Int = 128
-    private var intensity: Int = 24
     private var custom1: Int = 128  // X center
     private var custom2: Int = 128  // Y center
     private var custom3: Int = 16   // Area size
@@ -35,21 +30,11 @@ class JuliaAnimation : LedAnimation {
     private var startTimeNs: Long = 0L
     private var initialized: Boolean = false
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         startTimeNs = System.nanoTime()
+        paramSpeed = 128
+        paramIntensity = 24
         
         // Reset the center if we've just re-started this animation
         if (!initialized) {
@@ -59,7 +44,6 @@ class JuliaAnimation : LedAnimation {
             custom1 = 128
             custom2 = 128
             custom3 = 16
-            intensity = 24
             initialized = true
         }
     }
@@ -89,25 +73,27 @@ class JuliaAnimation : LedAnimation {
         ymax = ymax.coerceIn(-0.8f, 1.0f)
         
         // Calculate deltas
-        val dx = (xmax - xmin) / combinedWidth
-        val dy = (ymax - ymin) / combinedHeight
+        val dx = (xmax - xmin) / width
+        val dy = (ymax - ymin) / height
         
         // Max iterations
-        val maxIterations = (intensity / 2).coerceAtLeast(1)
+        val maxIterations = (paramIntensity / 2).coerceAtLeast(1)
         val maxCalc = 16.0f
         
         // Animate real and imaginary parts
         var reAl = -0.94299f  // PixelBlaze example
         var imAg = 0.3162f
         
+        // MathUtils.sin16 takes long/int but here we use sin16_t which is similar logic.
+        // Keeping local sin16_t logic or adapting.
         reAl += sin16_t(timeMs * 34) / 655340.0f
         imAg += sin16_t(timeMs * 26) / 655340.0f
         
         // Calculate Julia set for each pixel
         var y = ymin
-        for (j in 0 until combinedHeight) {
+        for (j in 0 until height) {
             var x = xmin
-            for (i in 0 until combinedWidth) {
+            for (i in 0 until width) {
                 // Test if z = z^2 + c tends towards infinity
                 var a = x
                 var b = y
@@ -151,7 +137,7 @@ class JuliaAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -159,61 +145,21 @@ class JuliaAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Julia"
+    override fun supportsSpeed(): Boolean = false // speed not used? timeMs is used.
+    override fun supportsIntensity(): Boolean = true
 
-    override fun supportsSpeed(): Boolean = false
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
-
-    /**
-     * Set custom1 (X center)
-     */
-    fun setCustom1(value: Int) {
-        this.custom1 = value.coerceIn(0, 255)
-    }
-
-    /**
-     * Set custom2 (Y center)
-     */
-    fun setCustom2(value: Int) {
-        this.custom2 = value.coerceIn(0, 255)
-    }
-
-    /**
-     * Set custom3 (Area size)
-     */
-    fun setCustom3(value: Int) {
-        this.custom3 = value.coerceIn(0, 255)
-    }
-
-    /**
-     * Set check1 (Blur)
-     */
-    fun setCheck1(enabled: Boolean) {
-        this.check1 = enabled
-    }
-
-    /**
-     * Get check1
-     */
-    fun getCheck1(): Boolean {
-        return check1
-    }
+    fun setCustom1(value: Int) { this.custom1 = value.coerceIn(0, 255) }
+    fun setCustom2(value: Int) { this.custom2 = value.coerceIn(0, 255) }
+    fun setCustom3(value: Int) { this.custom3 = value.coerceIn(0, 255) }
+    fun setCheck1(enabled: Boolean) { this.check1 = enabled }
+    fun getCheck1(): Boolean { return check1 }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y] = color
         }
     }
 
-    /**
-     * sin16_t - Sine function for 16-bit input (returns -32768 to 32767 range, normalized)
-     */
     private fun sin16_t(input: Long): Int {
         val normalized = (input % 65536) / 65536.0
         val radians = normalized * 2.0 * PI
@@ -221,27 +167,24 @@ class JuliaAnimation : LedAnimation {
         return (sine * 32767.0).roundToInt()
     }
 
-    /**
-     * Apply blur to the pixel grid
-     */
     private fun applyBlur(amount: Int, smear: Boolean) {
         if (amount <= 0) return
         val factor = amount.coerceIn(0, 255)
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+        // Creating temp array is costly every frame. But for now it's fine.
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
         
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 var sumR = 0
                 var sumG = 0
                 var sumB = 0
                 var count = 0
                 
-                // 3x3 blur kernel
                 for (dx in -1..1) {
                     for (dy in -1..1) {
                         val nx = x + dx
                         val ny = y + dy
-                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                        if (nx in 0 until width && ny in 0 until height) {
                             val color = pixelColors[nx][ny]
                             sumR += color.r
                             sumG += color.g
@@ -256,6 +199,7 @@ class JuliaAnimation : LedAnimation {
                 val avgG = if (count > 0) sumG / count else current.g
                 val avgB = if (count > 0) sumB / count else current.b
                 
+                // Simplified blur logic
                 temp[x][y] = RgbColor(
                     (current.r * (255 - factor) + avgR * factor) / 255,
                     (current.g * (255 - factor) + avgG * factor) / 255,
@@ -264,31 +208,16 @@ class JuliaAnimation : LedAnimation {
             }
         }
         
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
-    /**
-     * Get color from palette
-     */
     private fun colorFromPalette(index: Int, wrap: Boolean, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = if (wrap) {
-                (index % 256) * currentPalette.size / 256
-            } else {
-                ((index % 256) * currentPalette.size / 256).coerceIn(0, currentPalette.size - 1)
-            }
-            val baseColor = currentPalette[paletteIndex.coerceIn(0, currentPalette.size - 1)]
-            val brightnessFactor = if (brightness > 0) brightness / 255.0 else 1.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            // Fallback to HSV if no palette
-            return ColorUtils.hsvToRgb(index, 255, if (brightness > 0) brightness else 255)
-        }
+        val base = getColorFromPalette(index)
+        val brightnessFactor = if (brightness > 0) brightness / 255.0 else 1.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
     }
 }
-

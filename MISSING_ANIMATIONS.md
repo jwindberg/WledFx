@@ -21,9 +21,9 @@
 ## Missing 1D Strip Effects (~80)
 
 ### Blink/Strobe Effects (8)
-- Blink
+- ~~Blink~~ ✓ Implemented
 - Blink Rainbow
-- Strobe
+- ~~Strobe~~ ✓ Implemented (variation of Blink)
 - Strobe Rainbow
 - Multi Strobe
 - Flash Sparkle
@@ -34,64 +34,90 @@
 - Chase Color
 - Chase Flash
 - Chase Flash Random
-- Chase Rainbow
+- ~~Chase Rainbow~~ ✓ Implemented
 - Chase Rainbow White
 - Chase Random
 - Random Chase
 - Running Color
 - Running Dual
-- Running Lights
+- ~~Running Lights~~ ✓ Implemented
 - Running Random
-- Theater Chase
+- ~~Theater Chase~~ ✓ Implemented
 - Theater Chase Rainbow
 - Tricolor Chase
 - Dual Scan
 
 ### Wipe/Sweep Effects (9)
-- Color Wipe
+- ~~Color Wipe~~ ✓ Implemented
 - Color Wipe Random
 - Color Sweep
 - Color Sweep Random
 - Tricolor Wipe
 - Tricolor Fade
 - Fade
-- Dissolve
+- ~~Dissolve~~ ✓ Implemented
 - Dissolve Random
 
+### Simple Color Effects (18)
+- ~~Solid~~ ✓ Implemented
+- Solid Pattern
+- Solid Pattern Tri
+- Solid Glitter
+- ~~Confetti~~ ✓ Implemented (Random fading spots)
+- ~~Juggle~~ ✓ Implemented (Sine wave dots)
+- ~~Sinelon~~ ✓ Implemented (Sine scanner with trails)
+- Android
+- ~~Breathe~~ ✓ Implemented (Enabled existing 2D effect for 1D)
+- Fade 
+- Sweep Random
+
 ### Scanner Effects (4)
-- Larson Scanner
-- Dual Larson Scanner
-- Scan
-- ICU
+- ~~Larson Scanner~~ ✓ Implemented (Knight Rider)
+- ~~Dual Larson Scanner~~ ✓ Implemented (Opposing KITT)
+- ~~Scan~~ ✓ Implemented
+- ~~ICU~~ ✓ Implemented (Center-out scanner)
 
 ### Twinkle/Glitter Effects (7)
-- Twinkle
-- TwinkleCat
-- ColorTwinkle
-- FairyTwinkle
-- Glitter
-- Solid Glitter
-- Spots
-- Spots Fade
+- ~~Twinkle~~ ✓ Implemented
+- ~~Twinkle Random~~ ✓ Implemented (Color Variant)
+- ~~Twinkle Fade~~ ✓ Implemented (Smooth variant)
+- Twinkle Fade Random
+- ~~Sparkle~~ ✓ Implemented
+- ~~Flash Sparkle~~ ✓ Implemented (Strobe + Sparkles)
+- Hyper Sparkle
 
-### Noise/Perlin Effects (10)
-- Noise16_1
-- Noise16_2
-- Noise16_3
-- Noise16_4
-- FillNoise8
+### Other/Misc Patterns
+- ~~Sweep Random~~ ✓ Implemented
+- ~~Multi Comet~~ ✓ Implemented
+- ~~Ripple~~ ✓ Implemented (Existing)
+- ~~Solid~~ ✓ Implemented
+- Android
+- Flow
+- Drift
+- Fade
+- Loop
+- Wavesse
+
+### Noise Effects (10)
+- ~~Noise 1~~ ✓ Implemented (Palette Noise with 2D support)
+- ~~Noise 2~~ ✓ Implemented (Cycling Palette Noise)
+- ~~Noise 3~~ ✓ Implemented (Lava Lamp / Void Noise)
+- ~~Noise 4~~ ✓ Implemented (Fire-like Noise)
+- ~~FillNoise8~~ ✓ Implemented
 - MidNoise
-- NoiseMeter
-- NoiseMove
-- NoisePal
-- PhasedNoise
-- PerlinMove
-
 ### Fire/Flame Effects (3)
-- Fire 2012
+- ~~Fire 2012~~ ✓ Implemented (Classic 1D)
+- ~~Fire 2012 2D~~ ✓ Implemented (Vertical Matrix)
 - Fire Flicker
-- NoiseFire
+- Fire 2021
 - *(2DFireNoise implemented ✓)*
+
+### Rainbow Effects (Existing 2D: Rainbow, Chase Rainbow)
+- ~~Rainbow~~ ✓ Implemented (Rainbow Cycle)
+- ~~Chase Rainbow~~ ✓ Implemented (Rainbow Runner)
+- Rainbow Runner
+- Rainbow Glabber
+- Rainbow Swirl
 
 ### Meteor/Comet Effects (4)
 - ~~Meteor~~ ✓ Implemented
@@ -140,9 +166,9 @@
 ## Missing 2D Matrix Effects (~8)
 
 ### High Priority
-- **Starburst** - Exploding star patterns
-- **Sunrise** - Gradual sunrise simulation
-- **Drip** - Dripping effect
+- ~~**Starburst**~~ ✓ Implemented (Physics based)
+- ~~**Sunrise**~~ ✓ Implemented (Day/Night cycle)
+- ~~**Drip**~~ ✓ Implemented (Physics based)
 
 ### Medium Priority
 - **Dancing Shadows** - Shadow dance effect

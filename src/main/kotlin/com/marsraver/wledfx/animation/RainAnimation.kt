@@ -1,132 +1,123 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
-import kotlin.math.min
-import kotlin.math.roundToInt
+import com.marsraver.wledfx.physics.ParticleSystem
 import kotlin.random.Random
+import kotlin.math.roundToInt
 
 /**
  * Rain animation - drifting rainbow droplets falling across the matrix.
+ * Refactored to use ParticleSystem.
  */
-class RainAnimation : LedAnimation {
+class RainAnimation : BaseAnimation() {
 
-    private data class Drop(
-        var x: Double,
-        var y: Double,
-        var velocity: Double,
-        var hue: Int,
-    )
-
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
-    private val drops = mutableListOf<Drop>()
-    private var currentPalette: Palette? = null
+    // ParticleSystem: x, y, vx, vy, etc.
+    private val particleSystem = ParticleSystem(200)
 
-    private var lastUpdateNs: Long = 0L
-    private var spawnAccumulator = 0.0
-    private var hueSeed = Random.nextInt(0, 256)
-
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        drops.clear()
-        lastUpdateNs = 0L
-        spawnAccumulator = 0.0
-        hueSeed = Random.nextInt(0, 256)
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
+        particleSystem.clear()
+        // Default values
+        paramSpeed = 128
+        paramIntensity = 128
     }
 
     override fun update(now: Long): Boolean {
-        if (combinedWidth <= 0 || combinedHeight <= 0) return true
+        // Fade trails
+        // Intensity controls trail length? Higher intensity = less fade = longer trail?
+        // Original used fixed 24.
+        val fadeAmt = (255 - paramIntensity).coerceIn(10, 100)
+        fadeToBlack(fadeAmt)
 
-        if (lastUpdateNs == 0L) {
-            lastUpdateNs = now
-            return true
-        }
-
-        val deltaNs = now - lastUpdateNs
-        lastUpdateNs = now
-        val deltaSeconds = deltaNs / 1_000_000_000.0
-
-        fadeToBlack(24)
-
-        val spawnRatePerSecond = min(6.0, 1.5 + combinedWidth / 12.0) // vary with matrix size
-        spawnAccumulator += spawnRatePerSecond * deltaSeconds
-        while (spawnAccumulator >= 1.0) {
+        // Spawn drops
+        // Rate depends on width and speed
+        val spawnChance = (width / 32.0) * (paramSpeed / 255.0) + 0.05
+        if (Random.nextDouble() < spawnChance) {
             spawnDrop()
-            spawnAccumulator -= 1.0
         }
 
-        val iterator = drops.iterator()
+        // Update Physics
+        // We can iterate manually to draw trails or heads
+        val iterator = particleSystem.particles.iterator()
         while (iterator.hasNext()) {
-            val drop = iterator.next()
-            drop.y += drop.velocity * deltaSeconds
-            val intX = drop.x.roundToInt().coerceIn(0, combinedWidth - 1)
-            val intY = drop.y.roundToInt()
-
-            if (intY >= combinedHeight) {
+            val p = iterator.next()
+            
+            // Apply speed scaling?
+            // ParticleSystem moves by vx/vy each frame (assuming 60fps or delta).
+            // BaseAnimation update is called ~60fps often.
+            // Let's assume vy is pixels/frame.
+            
+            // Update position
+            p.update()
+            
+            // Draw
+            val x = p.x.roundToInt()
+            val y = p.y.roundToInt()
+            
+            if (y >= height) {
                 iterator.remove()
                 continue
             }
-
-            val rgb = getColorFromHue(drop.hue, 255)
-            addPixelColor(intX, intY, rgb)
-            if (intY + 1 < combinedHeight) {
-                val tail = getColorFromHue(drop.hue, 160)
-                addPixelColor(intX, intY + 1, tail)
+            
+            if (x in 0 until width && y in 0 until height) {
+                // Hue is stored in data1
+                val hue = p.data1.toInt()
+                
+                // Head color
+                val color = getColorFromHue(hue, 255)
+                addPixelColor(x, y, color)
+                
+                // Tail (previous position?)
+                // Since we faded, the previous pixel is already there but faded.
+                // We can draw a pixel above it to smoothe it?
+                if (y > 0) {
+                     // Maybe draw a dimmer pixel above to connect?
+                     // Not strictly necessary if we fade.
+                }
             }
         }
-
+        
         return true
     }
 
-    override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (::pixelColors.isInitialized && x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y]
-        } else {
-            RgbColor.BLACK
+    private fun spawnDrop() {
+        // x random
+        val x = Random.nextDouble() * width
+        val y = -Random.nextDouble(0.0, 3.0) // Start above
+        
+        // velocity (vy)
+        // Original: 6-11 units/sec? No, units/frame?
+        // Let's use 0.3 - 0.8 pixels/frame
+        val speed = 0.2f + (paramSpeed / 255.0f) * 0.8f
+        
+        // Hue
+        // We can cycle hue or random
+        val hue = Random.nextInt(256).toFloat()
+        
+        particleSystem.spawn(
+            x = x.toFloat(),
+            y = y.toFloat(),
+            vx = 0f,
+            vy = speed,
+            life = 100f
+        )?.apply {
+            data1 = hue // Store hue
         }
     }
-
-    override fun getName(): String = "Rain"
-
-    override fun cleanup() {
-        drops.clear()
-    }
-
-    private fun spawnDrop() {
-        val x = Random.nextDouble(0.0, combinedWidth.toDouble())
-        val initialY = -Random.nextDouble(0.0, 3.0)
-        val velocity = Random.nextDouble(6.0, 11.0)
-        hueSeed = (hueSeed + Random.nextInt(12, 48)) and 0xFF
-        val hue = hueSeed
-        drops += Drop(x, initialY, velocity, hue)
-    }
-
+    
     private fun fadeToBlack(amount: Int) {
         val factor = (255 - amount).coerceIn(0, 255) / 255.0
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }
 
     private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             val current = pixelColors[x][y]
             pixelColors[x][y] = RgbColor(
                 (current.r + rgb.r).coerceAtMost(255),
@@ -137,14 +128,23 @@ class RainAnimation : LedAnimation {
     }
 
     private fun getColorFromHue(hue: Int, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
+        val base = getColorFromPalette(hue)
+        val brightnessFactor = brightness / 255.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
+    }
+
+    override fun getPixelColor(x: Int, y: Int): RgbColor {
+        return if (::pixelColors.isInitialized && x in 0 until width && y in 0 until height) {
+            pixelColors[x][y]
         } else {
-            return ColorUtils.hsvToRgb(hue, 255, brightness)
+            RgbColor.BLACK
         }
     }
+    
+    override fun getName(): String = "Rain"
+    override fun cleanup() {
+        particleSystem.clear()
+    }
+    override fun is1D() = false
+    override fun is2D() = true
 }

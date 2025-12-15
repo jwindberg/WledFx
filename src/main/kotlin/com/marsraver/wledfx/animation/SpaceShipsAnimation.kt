@@ -1,90 +1,70 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
-import kotlin.math.PI
+import com.marsraver.wledfx.math.MathUtils
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
-import kotlin.math.sin
-import java.util.Random
+import kotlin.random.Random
 
 /**
  * Space Ships animation - 2D spaceships by stepko, adapted by Blaz Kristan
  * Spaceships move in random directions with blur and fade effects
  */
-class SpaceShipsAnimation : LedAnimation {
+class SpaceShipsAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
-    private var currentPalette: Palette? = null
     
-    private var speed: Int = 128
-    private var intensity: Int = 128
     private var smear: Boolean = false  // check1 - smear effect for larger grids
     
     private var direction: Int = 0  // 0-7 representing 8 directions
     private var nextDirectionChange: Long = 0L  // Next time bucket when direction should change
-    private val random = Random()
+    private val random = Random.Default
     private var startTimeNs: Long = 0L
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         startTimeNs = System.nanoTime()
         nextDirectionChange = 0L
         direction = random.nextInt(8)
+        paramSpeed = 128
+        paramIntensity = 128
     }
 
     override fun update(now: Long): Boolean {
         val timeMs = (now - startTimeNs) / 1_000_000
         
-        // Change direction every ~4 seconds (tb = now >> 12, every ~4s)
-        // SEGENV.step in original stores the next time bucket when change should occur
         val tb = timeMs shr 12
         if (tb > nextDirectionChange) {
-            // Randomly adjust direction: dir += random8(3) - 1
-            var newDir = direction + (random.nextInt(3) - 1)  // -1, 0, or +1
+            var newDir = direction + (random.nextInt(3) - 1)
             if (newDir > 7) newDir = 0
             else if (newDir < 0) newDir = 7
             direction = newDir
-            // Set next change time: SEGENV.step = tb + hw_random8(4)
             nextDirectionChange = tb + random.nextInt(4)
         }
 
-        // Fade to black based on speed: map(0, 255, 248, 16)
-        val fadeAmount = map(speed, 0, 255, 248, 16)
+        // Fade to black based on speed
+        val fadeAmount = MathUtils.map(paramSpeed, 0, 255, 248, 16)
         fadeToBlack(fadeAmount)
 
-        // Move the entire segment in the current direction
+        // Move buffer
         move(direction, 1)
-
+        
+        // Speed scaling for movement frequency?
+        // Original uses timeMs directly in beatsin8.
+        // We can leave it or scale it.
         val timeMsForBeatsin = timeMs
         
-        // Create 8 spaceships
         for (i in 0 until 8) {
-            val x = beatsin8(12 + i, 2, combinedWidth - 3, timeMsForBeatsin)
-            val y = beatsin8(15 + i, 2, combinedHeight - 3, timeMsForBeatsin)
-            val colorIndex = beatsin8(12 + i, 0, 255, timeMsForBeatsin)
-            val color = colorFromPalette(colorIndex, 255)
+            val x = MathUtils.beatsin8(12 + i, 2, width - 3, timeMsForBeatsin)
+            val y = MathUtils.beatsin8(15 + i, 2, height - 3, timeMsForBeatsin)
+            val colorIndex = MathUtils.beatsin8(12 + i, 0, 255, timeMsForBeatsin)
+            // Use BaseAnimation palette
+            val color = getColorFromPalette(colorIndex)
             
             addPixelColor(x, y, color)
             
-            // Smear effect for larger grids (>24)
-            if (smear && (combinedWidth > 24 || combinedHeight > 24)) {
+            if (smear && (width > 24 || height > 24)) {
                 addPixelColor(x + 1, y, color)
                 addPixelColor(x - 1, y, color)
                 addPixelColor(x, y + 1, color)
@@ -92,15 +72,14 @@ class SpaceShipsAnimation : LedAnimation {
             }
         }
 
-        // Apply blur based on intensity
-        val blurAmount = intensity shr 3
+        val blurAmount = paramIntensity shr 3
         applyBlur(blurAmount)
 
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -108,44 +87,36 @@ class SpaceShipsAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Space Ships"
+    override fun supportsIntensity(): Boolean = true
+    
+    fun setSmear(enabled: Boolean) { smear = enabled }
 
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
-
-    /**
-     * Move the entire pixel buffer in the specified direction
-     * Directions: 0=Right, 1=Down-Right, 2=Down, 3=Down-Left, 4=Left, 5=Up-Left, 6=Up, 7=Up-Right
-     */
     private fun move(dir: Int, amount: Int) {
         if (amount <= 0) return
         
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
         
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        // Optimize: double buffering or just simpler copy logic
+        // Original creates temp buffer.
+        
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 val (dx, dy) = when (dir) {
-                    0 -> Pair(amount, 0)      // Right
-                    1 -> Pair(amount, amount) // Down-Right
-                    2 -> Pair(0, amount)     // Down
-                    3 -> Pair(-amount, amount) // Down-Left
-                    4 -> Pair(-amount, 0)    // Left
-                    5 -> Pair(-amount, -amount) // Up-Left
-                    6 -> Pair(0, -amount)    // Up
-                    7 -> Pair(amount, -amount) // Up-Right
+                    0 -> Pair(amount, 0)
+                    1 -> Pair(amount, amount)
+                    2 -> Pair(0, amount)
+                    3 -> Pair(-amount, amount)
+                    4 -> Pair(-amount, 0)
+                    5 -> Pair(-amount, -amount)
+                    6 -> Pair(0, -amount)
+                    7 -> Pair(amount, -amount)
                     else -> Pair(0, 0)
                 }
                 
                 val srcX = x - dx
                 val srcY = y - dy
                 
-                if (srcX in 0 until combinedWidth && srcY in 0 until combinedHeight) {
+                if (srcX in 0 until width && srcY in 0 until height) {
                     temp[x][y] = pixelColors[srcX][srcY]
                 } else {
                     temp[x][y] = RgbColor.BLACK
@@ -158,8 +129,8 @@ class SpaceShipsAnimation : LedAnimation {
 
     private fun fadeToBlack(amount: Int) {
         val factor = (255 - amount).coerceIn(0, 255) / 255.0
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
@@ -168,21 +139,21 @@ class SpaceShipsAnimation : LedAnimation {
     private fun applyBlur(amount: Int) {
         if (amount <= 0) return
         val factor = amount.coerceIn(0, 255)
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
         
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        // This is a Box Blur (3x3).
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 var sumR = 0
                 var sumG = 0
                 var sumB = 0
                 var count = 0
                 
-                // 3x3 blur kernel
                 for (dx in -1..1) {
                     for (dy in -1..1) {
                         val nx = x + dx
                         val ny = y + dy
-                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                        if (nx in 0 until width && ny in 0 until height) {
                             val color = pixelColors[nx][ny]
                             sumR += color.r
                             sumG += color.g
@@ -208,23 +179,8 @@ class SpaceShipsAnimation : LedAnimation {
         pixelColors = temp
     }
 
-    /**
-     * beatsin8 - FastLED's beatsin8 function
-     * Creates a sine wave that oscillates at the given BPM (beats per minute)
-     */
-    private fun beatsin8(bpm: Int, low: Int, high: Int, timeMs: Long): Int {
-        val beatsPerSecond = bpm / 60.0
-        val radiansPerMs = beatsPerSecond * 2.0 * PI / 1000.0
-        val phase = timeMs * radiansPerMs
-        val sine = sin(phase)
-        
-        val mid = (low + high) / 2.0
-        val range = (high - low) / 2.0
-        return (mid + sine * range).roundToInt().coerceIn(min(low, high), max(low, high))
-    }
-
     private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             val current = pixelColors[x][y]
             pixelColors[x][y] = RgbColor(
                 (current.r + rgb.r).coerceAtMost(255),
@@ -233,25 +189,4 @@ class SpaceShipsAnimation : LedAnimation {
             )
         }
     }
-
-    private fun colorFromPalette(colorIndex: Int, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = (colorIndex % 256) * currentPalette.size / 256
-            val baseColor = currentPalette[paletteIndex.coerceIn(0, currentPalette.size - 1)]
-            val brightnessFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            // Fallback to HSV if no palette
-            return ColorUtils.hsvToRgb(colorIndex, 255, brightness)
-        }
-    }
-
-    private fun map(value: Int, fromLow: Int, fromHigh: Int, toLow: Int, toHigh: Int): Int {
-        val fromRange = (fromHigh - fromLow).toDouble()
-        val toRange = (toHigh - toLow).toDouble()
-        val scaled = (value - fromLow) / fromRange
-        return (toLow + scaled * toRange).roundToInt()
-    }
 }
-

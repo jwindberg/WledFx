@@ -1,8 +1,6 @@
 package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.abs
 import kotlin.math.floor
@@ -13,77 +11,74 @@ import kotlin.math.roundToInt
  * Waverly animation - mirrored rainbow columns driven by 3D Perlin noise.
  * Audio RMS controls column height, blur strength, and brightness.
  */
-class WaverlyAnimation : LedAnimation {
+class WaverlyAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<RgbColor>> = emptyArray()
     private var timeValue: Double = 0.0
-    private var currentPalette: Palette? = null
-
     private var loudnessMeter: LoudnessMeter? = null
 
+    override fun getName(): String = "Waverly"
     override fun supportsPalette(): Boolean = true
+    override fun isAudioReactive(): Boolean = true
 
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         timeValue = 0.0
+        lastUpdateNs = 0L
         loudnessMeter = LoudnessMeter()
+        paramSpeed = 128 // Default?
     }
+
+    private var lastUpdateNs: Long = 0L
 
     override fun update(now: Long): Boolean {
-        timeValue = now / 1_000_000.0 / 2.0
+        if (lastUpdateNs == 0L) {
+            lastUpdateNs = now
+            return true
+        }
+        val deltaMs = (now - lastUpdateNs) / 1_000_000.0
+        lastUpdateNs = now
+        
+        // Accumulate time based on speed
+        // Base speed was roughy 1ms increment per 2ms of real time (since it divided by 2.0)
+        // Let's say speed 128 = 1.0 factor
+        val speedFactor = paramSpeed / 128.0
+        // Original logic: timeValue = now_ms / 2.0
+        // So we want to add (deltaMs / 2.0) * speedFactor
+        timeValue += (deltaMs * 0.5 * speedFactor)
         clearPixels()
 
         // Get loudness (0-1024) and convert to 0-255 range
         val loudness = loudnessMeter?.getCurrentLoudness() ?: 0
         val level = (loudness / 1024.0 * 255.0).coerceIn(0.0, 255.0)
         
-        // When level is 0, should be completely black (no base values)
+        // When level is 0, should be completely black
         if (level <= 0.0) {
-            // Everything is already cleared, just return
             return true
         }
         
-        // Scale everything from 0 when quiet to full when loud
         val levelFactor = level / 255.0
-        // Increase height multiplier so music fills closer to 50% of screen
-        // With normal music levels, should reach ~50% height
-        val heightMultiplier = levelFactor * 3.5 // Increased from 1.7 to 3.5 for better fill
-        // Increase brightness - make it brighter, especially at lower levels
-        // Scale from 0 to 255, but boost lower levels for better visibility
+        val heightMultiplier = levelFactor * 3.5 
         val brightnessBase = (levelFactor * 255.0).coerceIn(0.0, 255.0)
-        val blurAmount = (levelFactor * 127.0).roundToInt().coerceIn(0, 127) // 0 to 127 (was 32 to 127)
+        val blurAmount = (levelFactor * 127.0).roundToInt().coerceIn(0, 127)
 
-        for (i in 0 until combinedWidth) {
+        for (i in 0 until width) {
             val noiseVal = inoise8(i * 45.0, timeValue, timeValue * 0.6)
-            val baseHeight = mapRange(noiseVal, 0.0, 255.0, 0.0, combinedHeight.toDouble())
+            val baseHeight = mapRange(noiseVal, 0.0, 255.0, 0.0, height.toDouble())
             val thisMax = (baseHeight * heightMultiplier)
                 .roundToInt()
-                .coerceIn(0, combinedHeight)
+                .coerceIn(0, height)
             if (thisMax <= 0) continue
 
-            // Increase brightness - ensure it's bright enough to be visible
-            // Minimum brightness when audio is present, scale up with level
-            val minBrightness = 180 // Minimum brightness when audio detected
+            val minBrightness = 180 
             val brightness = (minBrightness + (brightnessBase - minBrightness) * 0.3).roundToInt().coerceIn(180, 255)
             for (j in 0 until thisMax) {
                 val paletteIndex = mapRange(j.toDouble(), 0.0, thisMax.toDouble(), 250.0, 0.0)
                 val color = colorFromRainbowPalette(paletteIndex, brightness)
                 addPixelColor(i, j, color)
 
-                val mirrorX = combinedWidth - 1 - i
-                val mirrorY = combinedHeight - 1 - j
+                val mirrorX = width - 1 - i
+                val mirrorY = height - 1 - j
                 addPixelColor(mirrorX, mirrorY, color)
             }
         }
@@ -93,16 +88,12 @@ class WaverlyAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
         }
     }
-
-    override fun getName(): String = "Waverly"
-
-    override fun isAudioReactive(): Boolean = true
 
     override fun cleanup() {
         loudnessMeter?.stop()
@@ -110,15 +101,15 @@ class WaverlyAnimation : LedAnimation {
     }
 
     private fun clearPixels() {
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = RgbColor.BLACK
             }
         }
     }
 
     private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) return
+        if (x !in 0 until width || y !in 0 until height) return
         val current = pixelColors[x][y]
         pixelColors[x][y] = RgbColor(
             (current.r + rgb.r).coerceAtMost(255),
@@ -130,10 +121,10 @@ class WaverlyAnimation : LedAnimation {
     private fun blur2d(amount: Int) {
         if (amount <= 0) return
         val factor = amount.coerceIn(0, 255)
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
 
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 var sumR = 0
                 var sumG = 0
                 var sumB = 0
@@ -142,7 +133,7 @@ class WaverlyAnimation : LedAnimation {
                     for (dy in -1..1) {
                         val nx = x + dx
                         val ny = y + dy
-                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                        if (nx in 0 until width && ny in 0 until height) {
                             val w = if (dx == 0 && dy == 0) 4 else 1
                             val color = pixelColors[nx][ny]
                             sumR += color.r * w
@@ -164,30 +155,18 @@ class WaverlyAnimation : LedAnimation {
             }
         }
 
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
     private fun colorFromRainbowPalette(indexValue: Double, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            var index = indexValue % 256.0
-            if (index < 0) index += 256.0
-            val paletteIndex = (index / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            var index = indexValue % 256.0
-            if (index < 0) index += 256.0
-            val hue = (index / 255.0 * 360.0).toInt()
-            val saturation = 255
-            val value = brightness
-            return ColorUtils.hsvToRgb(hue, saturation, value)
-        }
+        val index = indexValue.toInt()
+        val base = getColorFromPalette(index)
+        val brightnessFactor = brightness / 255.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
     }
 
     private fun mapRange(value: Double, inMin: Double, inMax: Double, outMin: Double, outMax: Double): Double {
@@ -273,4 +252,3 @@ class WaverlyAnimation : LedAnimation {
         private val PERM = IntArray(512) { PERM_BASE[it and PERM_MASK] }
     }
 }
-

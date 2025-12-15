@@ -1,7 +1,7 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-
 import com.marsraver.wledfx.audio.FftMeter
 import kotlin.math.max
 import kotlin.math.min
@@ -10,24 +10,20 @@ import kotlin.math.roundToInt
 /**
  * Akemi animation - renders a stylised character with audio-reactive elements and side GEQ bars.
  */
-class AkemiAnimation : LedAnimation {
+class AkemiAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private var pixelColors: Array<Array<RgbColor>> = emptyArray()
-    
     private var fftMeter: FftMeter? = null
-
-    private var colorSpeed: Int = 128
-    private var intensity: Int = 128
-
     private val numBands: Int = 16
+    
+    // speed -> paramSpeed from BaseAnimation
+    // intensity -> paramIntensity from BaseAnimation
+    
+    // Note: Akemi uses custom explicit pixel storage (pixelColors implementation unique to it or 2D effects)
+    // BaseAnimation doesn't enforce storage, so we keep it here.
 
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        // Use 16 bands for side GEQ bars
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         fftMeter = FftMeter(bands = numBands)
     }
 
@@ -35,7 +31,7 @@ class AkemiAnimation : LedAnimation {
         // Use normalized bands for better sensitivity across different volumes
         val spectrumSnapshot = fftMeter?.getNormalizedBands() ?: IntArray(numBands)
         val timeMs = now / 1_000_000L
-        val speedFactor = (colorSpeed shr 2) + 2
+        val speedFactor = (paramSpeed shr 2) + 2
         var counter = ((timeMs * speedFactor) and 0xFFFF).toInt()
         counter = counter shr 8
 
@@ -51,18 +47,18 @@ class AkemiAnimation : LedAnimation {
 
         val base = spectrumSnapshot.getOrElse(0) { 0 } / 255.0f
         // More sensitive dancing trigger: responds at lower intensities and lower audio levels
-        val isDancing = intensity > 64 && spectrumSnapshot.getOrElse(0) { 0 } > 64
+        val isDancing = paramIntensity > 64 && spectrumSnapshot.getOrElse(0) { 0 } > 64
 
         if (isDancing) {
-            for (x in 0 until combinedWidth) {
+            for (x in 0 until width) {
                 setPixelColor(x, 0, RgbColor.BLACK)
             }
         }
 
-        for (y in 0 until combinedHeight) {
-            val akY = min(BASE_HEIGHT - 1, y * BASE_HEIGHT / combinedHeight)
-            for (x in 0 until combinedWidth) {
-                val akX = min(BASE_WIDTH - 1, x * BASE_WIDTH / combinedWidth)
+        for (y in 0 until height) {
+            val akY = min(BASE_HEIGHT - 1, y * BASE_HEIGHT / height)
+            for (x in 0 until width) {
+                val akX = min(BASE_WIDTH - 1, x * BASE_WIDTH / width)
                 val ak = AKEMI_MAP[akY * BASE_WIDTH + akX]
 
                 val color = when (ak) {
@@ -88,18 +84,19 @@ class AkemiAnimation : LedAnimation {
                 }
 
                 if (isDancing) {
-                    val targetY = min(combinedHeight - 1, y + 1)
+                    val targetY = min(height - 1, y + 1)
                     setPixelColor(x, targetY, color)
                 } else {
                     setPixelColor(x, y, color)
                 }
             }
         }
-
-        val xMax = max(1, combinedWidth / 8)
-        val midY = combinedHeight / 2
-        val maxBarHeight = max(1, 17 * combinedHeight / 32)
-
+        
+        // Draw Bars
+        val xMax = max(1, width / 8)
+        val midY = height / 2
+        val maxBarHeight = max(1, 17 * height / 32)
+        
         for (x in 0 until xMax) {
             var band = mapValue(x, 0, max(xMax, 4), 0, 15)
             band = constrain(band, 0, 15)
@@ -111,19 +108,18 @@ class AkemiAnimation : LedAnimation {
 
             for (y in 0 until barHeight) {
                 val topY = midY - y
-                if (topY in 0 until combinedHeight) {
+                if (topY in 0 until height) {
                     setPixelColor(x, topY, barColor)
-                    val mirrorX = combinedWidth - 1 - x
+                    val mirrorX = width - 1 - x
                     setPixelColor(mirrorX, topY, barColor)
                 }
             }
         }
-
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -131,7 +127,6 @@ class AkemiAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Akemi"
-
     override fun isAudioReactive(): Boolean = true
 
     override fun cleanup() {
@@ -145,9 +140,7 @@ class AkemiAnimation : LedAnimation {
     }
 
     private fun constrain(value: Int, minVal: Int, maxVal: Int): Int = value.coerceIn(minVal, maxVal)
-
     private fun clamp01(value: Float): Float = value.coerceIn(0f, 1f)
-
     private fun hsvToRgb(h: Float, s: Float, v: Float): RgbColor {
         return ColorUtils.hsvToRgb(h, s, v)
     }
@@ -177,7 +170,7 @@ class AkemiAnimation : LedAnimation {
     }
 
     private fun setPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y] = rgb
         }
     }
@@ -186,6 +179,7 @@ class AkemiAnimation : LedAnimation {
         private const val BASE_WIDTH = 32
         private const val BASE_HEIGHT = 32
         private val AKEMI_MAP = intArrayOf(
+            // ... (keeping map data same) ... 
             0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
             0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
             0,0,0,0,0,0,0,0,0,0,0,2,2,3,3,3,3,3,3,2,2,0,0,0,0,0,0,0,0,0,0,0,
@@ -221,4 +215,3 @@ class AkemiAnimation : LedAnimation {
         )
     }
 }
-

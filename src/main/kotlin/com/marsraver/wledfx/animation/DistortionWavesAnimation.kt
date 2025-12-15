@@ -1,76 +1,55 @@
 package com.marsraver.wledfx.animation
-import com.marsraver.wledfx.color.RgbColor
-import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
 
-import kotlin.math.cos
-import kotlin.math.max
+import com.marsraver.wledfx.color.RgbColor
+import com.marsraver.wledfx.math.MathUtils
+import com.marsraver.wledfx.color.ColorUtils
 import kotlin.math.min
-import kotlin.math.roundToInt
-import kotlin.math.sin
+import kotlin.math.max
 
 /**
- * Distortion Waves animation - Wave distortion effects with oscillating centers.
+ * Distortion Waves animation
  */
-class DistortionWavesAnimation : LedAnimation {
-
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
-
-    private var speed: Int = 128
+class DistortionWavesAnimation : BaseAnimation() {
+    
     private var scale: Int = 64
     private var fill: Boolean = false
     private var zoom: Boolean = false
     private var alt: Boolean = false
     private var paletteMode: Int = 0
-    private var currentPalette: Palette? = null
-
     private var startTime: Long = 0
 
-    override fun supportsPalette(): Boolean = true
+    override fun getName(): String = "Distortion Waves"
+    override fun is1D(): Boolean = false
+    override fun is2D(): Boolean = true
 
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
+    override fun onInit() {
         startTime = System.currentTimeMillis()
     }
 
     override fun update(now: Long): Boolean = true
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        if (x !in 0 until combinedWidth || y !in 0 until combinedHeight) {
-            return RgbColor.BLACK
-        }
+        if (x !in 0 until width || y !in 0 until height) return RgbColor.BLACK
 
         val timeMs = System.currentTimeMillis() - startTime
-        val speedVal = speed / 32
+        val speedVal = paramSpeed / 32
         var scaleVal = scale / 32
 
-        if (zoom) {
-            scaleVal += 192 / (combinedWidth + combinedHeight)
-        }
+        if (zoom) scaleVal += 192 / (width + height)
 
         val a = timeMs / 32
         val a2 = a / 2
         val a3 = a / 3
 
-        val colsScaled = combinedWidth * scaleVal
-        val rowsScaled = combinedHeight * scaleVal
+        val colsScaled = width * scaleVal
+        val rowsScaled = height * scaleVal
 
-        val cx = beatsin(10 - speedVal, 0, colsScaled, timeMs)
-        val cy = beatsin(12 - speedVal, 0, rowsScaled, timeMs)
-        val cx1 = beatsin(13 - speedVal, 0, colsScaled, timeMs)
-        val cy1 = beatsin(15 - speedVal, 0, rowsScaled, timeMs)
-        val cx2 = beatsin(17 - speedVal, 0, colsScaled, timeMs)
-        val cy2 = beatsin(14 - speedVal, 0, rowsScaled, timeMs)
+        val cx = MathUtils.beatsin8(10 - speedVal, 0, colsScaled, timeMs)
+        val cy = MathUtils.beatsin8(12 - speedVal, 0, rowsScaled, timeMs)
+        val cx1 = MathUtils.beatsin8(13 - speedVal, 0, colsScaled, timeMs)
+        val cy1 = MathUtils.beatsin8(15 - speedVal, 0, rowsScaled, timeMs)
+        val cx2 = MathUtils.beatsin8(17 - speedVal, 0, colsScaled, timeMs)
+        val cy2 = MathUtils.beatsin8(14 - speedVal, 0, rowsScaled, timeMs)
 
         val xoffs = x * scaleVal
         val yoffs = y * scaleVal
@@ -79,24 +58,25 @@ class DistortionWavesAnimation : LedAnimation {
         val gdistort: Int
         val bdistort: Int
 
+        // Using MathUtils.cos8
         if (alt) {
-            rdistort = cos8(((x + y) * 8 + a2.toInt()) and 255) shr 1
-            gdistort = cos8(((x + y) * 8 + a3.toInt() + 32) and 255) shr 1
-            bdistort = cos8(((x + y) * 8 + a.toInt() + 64) and 255) shr 1
+            rdistort = MathUtils.cos8(((x + y) * 8 + a2.toInt()) and 255) shr 1
+            gdistort = MathUtils.cos8(((x + y) * 8 + a3.toInt() + 32) and 255) shr 1
+            bdistort = MathUtils.cos8(((x + y) * 8 + a.toInt() + 64) and 255) shr 1
         } else {
-            val termR = (cos8(((x shl 3) + a.toInt()) and 255)
-                    + cos8(((y shl 3) - a2.toInt()) and 255)
+            val termR = (MathUtils.cos8(((x shl 3) + a.toInt()) and 255)
+                    + MathUtils.cos8(((y shl 3) - a2.toInt()) and 255)
                     + a3.toInt()) and 255
-            val termG = (cos8(((x shl 3) - a2.toInt()) and 255)
-                    + cos8(((y shl 3) + a3.toInt()) and 255)
+            val termG = (MathUtils.cos8(((x shl 3) - a2.toInt()) and 255)
+                    + MathUtils.cos8(((y shl 3) + a3.toInt()) and 255)
                     + a.toInt() + 32) and 255
-            val termB = (cos8(((x shl 3) + a3.toInt()) and 255)
-                    + cos8(((y shl 3) - a.toInt()) and 255)
+            val termB = (MathUtils.cos8(((x shl 3) + a3.toInt()) and 255)
+                    + MathUtils.cos8(((y shl 3) - a.toInt()) and 255)
                     + a2.toInt() + 64) and 255
 
-            rdistort = cos8(termR) shr 1
-            gdistort = cos8(termG) shr 1
-            bdistort = cos8(termB) shr 1
+            rdistort = MathUtils.cos8(termR) shr 1
+            gdistort = MathUtils.cos8(termG) shr 1
+            bdistort = MathUtils.cos8(termB) shr 1
         }
 
         val distR = ((xoffs - cx) * (xoffs - cx) + (yoffs - cy) * (yoffs - cy)) shr 7
@@ -107,91 +87,22 @@ class DistortionWavesAnimation : LedAnimation {
         var valueG = gdistort + (((a2 - distG).toInt()) shl 1)
         var valueB = bdistort + (((a3 - distB).toInt()) shl 1)
 
-        valueR = cos8(valueR and 255)
-        valueG = cos8(valueG and 255)
-        valueB = cos8(valueB and 255)
+        valueR = MathUtils.cos8(valueR and 255)
+        valueG = MathUtils.cos8(valueG and 255)
+        valueB = MathUtils.cos8(valueB and 255)
 
         return if (paletteMode == 0) {
             RgbColor(valueR, valueG, valueB)
         } else {
             val brightness = (valueR + valueG + valueB) / 3
             if (fill) {
-                colorFromPalette(brightness, 255)
+                // Brightness = hue? Or index?
+                getColorFromPalette(brightness)
             } else {
-                val hsv = rgb2hsv(valueR shr 2, valueG shr 2, valueB shr 2)
-                // hsv is encoded as RgbColor where r=hue, g=saturation, b=value
-                colorFromPalette(hsv.r, brightness)
+                val hsv = ColorUtils.rgbToHsv(RgbColor(valueR shr 2, valueG shr 2, valueB shr 2))
+                // Use H as index
+                getColorFromPalette((hsv.h * 255 / 360).toInt())
             }
         }
     }
-
-    override fun getName(): String = "Distortion Waves"
-
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
-
-    private fun cos8(theta: Int): Int {
-        val radians = (theta and 255) / 255.0 * 2 * Math.PI
-        val cosValue = cos(radians)
-        return ((cosValue + 1.0) * 127.5).roundToInt().coerceIn(0, 255)
-    }
-
-    private fun beatsin(frequency: Int, min: Int, max: Int, timeMs: Long): Int {
-        val phase = timeMs * frequency / 1000.0
-        val sine = sin(phase)
-        val range = max - min
-        return min + ((sine + 1.0) * range / 2.0).roundToInt()
-    }
-
-    // Returns HSV encoded as RgbColor (r=hue, g=saturation, b=value) for compatibility
-    private fun rgb2hsv(r: Int, g: Int, b: Int): RgbColor {
-        val rf = r / 255.0f
-        val gf = g / 255.0f
-        val bf = b / 255.0f
-
-        val max = max(rf, max(gf, bf))
-        val min = min(rf, min(gf, bf))
-        val delta = max - min
-
-        var h = 0f
-        when {
-            delta == 0f -> h = 0f
-            max == rf -> h = 60 * (((gf - bf) / delta) % 6)
-            max == gf -> h = 60 * (((bf - rf) / delta) + 2)
-            else -> h = 60 * (((rf - gf) / delta) + 4)
-        }
-        if (h < 0) h += 360f
-        val s = if (max == 0f) 0f else delta / max
-        val v = max
-
-        return RgbColor(
-            (h * 255 / 360).roundToInt().coerceIn(0, 255),
-            (s * 255).roundToInt().coerceIn(0, 255),
-            (v * 255).roundToInt().coerceIn(0, 255)
-        )
-    }
-
-    private fun colorFromPalette(hue: Int, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            // Fallback to HSV if no palette is set
-            val h = (hue % 256) / 255.0f * 360.0f
-            val s = 1.0f
-            val v = brightness / 255.0f
-            return ColorUtils.hsvToRgb(h, s, v)
-        }
-    }
 }
-

@@ -2,7 +2,7 @@ package com.marsraver.wledfx.animation
 
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
+import com.marsraver.wledfx.math.MathUtils
 import kotlin.math.sin
 import kotlin.math.cos
 import kotlin.math.abs
@@ -12,35 +12,22 @@ import kotlin.math.abs
  * 
  * Original C code from WLED v0.15.3 FX.cpp line 6226
  */
-class PlasmaRotoZoomAnimation : LedAnimation {
+class PlasmaRotoZoomAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
     private lateinit var plasma: IntArray
-    private var currentPalette: Palette? = null
     private var startTimeNs: Long = 0L
     
-    private var speed: Int = 128
-    private var intensity: Int = 128  // Scale
     private var useAltMode: Boolean = false
     private var angle: Float = 0f
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? = currentPalette
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        plasma = IntArray(combinedWidth * combinedHeight)
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
+        plasma = IntArray(width * height)
         startTimeNs = System.nanoTime()
         angle = 0f
+        paramSpeed = 128
+        paramIntensity = 128
     }
 
     override fun update(now: Long): Boolean {
@@ -49,42 +36,42 @@ class PlasmaRotoZoomAnimation : LedAnimation {
         val ms = ((now - startTimeNs) / 1_000_000 / 15).toInt()
         
         // Generate plasma
-        for (j in 0 until combinedHeight) {
-            val index = j * combinedWidth
-            for (i in 0 until combinedWidth) {
+        for (j in 0 until height) {
+            val index = j * width
+            for (i in 0 until width) {
                 plasma[index + i] = if (useAltMode) {
                     ((i * 4) xor (j * 4)) + ms / 6
                 } else {
-                    inoise8(i * 40, j * 40, ms)
+                    MathUtils.inoise8(i * 40, j * 40, ms)
                 }
             }
         }
         
         // Rotozoom
-        val f = (sinT(angle / 2) + ((128 - intensity) / 128.0f) + 1.1f) / 1.5f
+        val f = (sinT(angle / 2) + ((128 - paramIntensity) / 128.0f) + 1.1f) / 1.5f
         val kosinus = cosT(angle) * f
         val sinus = sinT(angle) * f
         
-        for (i in 0 until combinedWidth) {
+        for (i in 0 until width) {
             val u1 = i * kosinus
             val v1 = i * sinus
-            for (j in 0 until combinedHeight) {
-                val u = abs((u1 - j * sinus).toInt()) % combinedWidth
-                val v = abs((v1 + j * kosinus).toInt()) % combinedHeight
-                val paletteIndex = plasma[v * combinedWidth + u]
+            for (j in 0 until height) {
+                val u = abs((u1 - j * sinus).toInt()) % width
+                val v = abs((v1 + j * kosinus).toInt()) % height
+                val paletteIndex = plasma[v * width + u]
                 pixelColors[i][j] = colorFromPalette(paletteIndex, true, 255)
             }
         }
         
         // Update rotation
-        angle -= 0.03f + (speed - 128) * 0.0002f
+        angle -= 0.03f + (paramSpeed - 128) * 0.0002f
         if (angle < -6283.18530718f) angle += 6283.18530718f  // 1000*2*PI
         
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -92,24 +79,11 @@ class PlasmaRotoZoomAnimation : LedAnimation {
     }
 
     override fun getName(): String = "PlasmaRotoZoom"
+    override fun supportsIntensity(): Boolean = true
 
-    override fun isAudioReactive(): Boolean = false
+    fun setUseAltMode(enabled: Boolean) { this.useAltMode = enabled }
+    fun getUseAltMode(): Boolean { return useAltMode }
 
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int = speed
-
-    override fun cleanup() {}
-    
-    private fun inoise8(x: Int, y: Int, z: Int): Int {
-        val hash = ((x * 2654435761L + y * 2246822519L + z * 3266489917L) and 0xFFFFFFFF).toInt()
-        return (hash and 0xFF)
-    }
-    
     private fun sinT(angle: Float): Float {
         return sin(angle.toDouble()).toFloat()
     }
@@ -119,18 +93,8 @@ class PlasmaRotoZoomAnimation : LedAnimation {
     }
     
     private fun colorFromPalette(index: Int, wrap: Boolean, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = if (wrap) {
-                (index % 256) * currentPalette.size / 256
-            } else {
-                ((index % 256) * currentPalette.size / 256).coerceIn(0, currentPalette.size - 1)
-            }
-            val baseColor = currentPalette[paletteIndex.coerceIn(0, currentPalette.size - 1)]
-            val brightnessFactor = if (brightness > 0) brightness / 255.0 else 1.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            return ColorUtils.hsvToRgb(index % 256, 255, if (brightness > 0) brightness else 255)
-        }
+        val base = getColorFromPalette(index)
+        val brightnessFactor = if (brightness > 0) brightness / 255.0 else 1.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
     }
 }

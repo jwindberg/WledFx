@@ -1,69 +1,53 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import java.util.Random
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
+import kotlin.math.*
 
 /**
- * Crazy Bees animation - Bees flying to random targets with flowers.
+ * Crazy Bees animation - Bees flying to random targets.
  */
-class CrazyBeesAnimation : LedAnimation {
+class CrazyBeesAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
-    private var currentPalette: Palette? = null
+    private lateinit var pixelColors: Array<Array<RgbColor>>
     private lateinit var bees: Array<Bee>
     private var numBees: Int = 0
     private var lastUpdateTime: Long = 0
     private var updateInterval: Long = 0
+    
+    private val RANDOM = kotlin.random.Random.Default
+    private val MAX_BEES = 5
 
-    private var fadeAmount: Int = 32
-    private var blurAmount: Int = 10
-    private var speed: Int = 128
+    override fun getName(): String = "Crazy Bees"
+    override fun is1D(): Boolean = false
+    override fun is2D(): Boolean = true
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         lastUpdateTime = 0
 
-        numBees = min(MAX_BEES, (combinedWidth * combinedHeight) / 256 + 1)
+        numBees = min(MAX_BEES, (width * height) / 256 + 1)
         bees = Array(numBees) { Bee() }
 
-        RANDOM.setSeed(System.currentTimeMillis())
+        // RANDOM.setSeed(System.currentTimeMillis()) // Kotlin Random default is seeded
         for (i in 0 until numBees) {
             val bee = bees[i]
-            bee.posX = RANDOM.nextInt(combinedWidth)
-            bee.posY = RANDOM.nextInt(combinedHeight)
-            bee.setAim(combinedWidth, combinedHeight)
+            bee.posX = RANDOM.nextInt(width)
+            bee.posY = RANDOM.nextInt(height)
+            bee.setAim(width, height)
         }
 
-        val speedFactor = (speed shr 4) + 1
+        val speedFactor = (paramSpeed shr 4) + 1
         updateInterval = 16_000_000L * 16L / speedFactor
     }
 
     override fun update(now: Long): Boolean {
-        if (now - lastUpdateTime < updateInterval) {
-            return true
-        }
+        if (now - lastUpdateTime < updateInterval) return true
         lastUpdateTime = now
 
+        val fadeAmount = 32
+        val blurAmount = 10
         fadeToBlack(fadeAmount)
         applyBlur(blurAmount)
 
@@ -71,13 +55,15 @@ class CrazyBeesAnimation : LedAnimation {
             val bee = bees[i]
 
             val flowerColor = getColorFromHue(bee.hue, 255)
+            // Draw flower (cross)
             addPixelColor(bee.aimX + 1, bee.aimY, flowerColor)
             addPixelColor(bee.aimX, bee.aimY + 1, flowerColor)
             addPixelColor(bee.aimX - 1, bee.aimY, flowerColor)
             addPixelColor(bee.aimX, bee.aimY - 1, flowerColor)
 
             if (bee.posX != bee.aimX || bee.posY != bee.aimY) {
-                val beeColor = getColorFromHue(bee.hue, 200) // Slightly dimmer for bees
+                // Draw bee
+                val beeColor = getColorFromHue(bee.hue, 200) 
                 setPixelColor(bee.posX, bee.posY, beeColor)
 
                 val error2 = bee.error * 2
@@ -90,96 +76,68 @@ class CrazyBeesAnimation : LedAnimation {
                     bee.posY += bee.signY
                 }
             } else {
-                bee.setAim(combinedWidth, combinedHeight)
+                bee.setAim(width, height)
             }
         }
-
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
         }
     }
-
-    override fun getName(): String = "Crazy Bees"
-
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
-
+    
     private fun fadeToBlack(amount: Int) {
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
-                val current = pixelColors[x][y]
-                pixelColors[x][y] = RgbColor(
-                    max(0, current.r - amount),
-                    max(0, current.g - amount),
-                    max(0, current.b - amount)
-                )
+        val factor = (255 - amount).coerceIn(0, 255) / 255.0
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }
 
     private fun applyBlur(amount: Int) {
         if (amount <= 0) return
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
 
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
-                var sumR = 0
-                var sumG = 0
-                var sumB = 0
-                var count = 0
-
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                var sumR = 0; var sumG = 0; var sumB = 0; var count = 0
                 for (dx in -1..1) {
                     for (dy in -1..1) {
                         val nx = x + dx
                         val ny = y + dy
-                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
-                            val color = pixelColors[nx][ny]
-                            sumR += color.r
-                            sumG += color.g
-                            sumB += color.b
+                        if (nx in 0 until width && ny in 0 until height) {
+                            val c = pixelColors[nx][ny]
+                            sumR += c.r; sumG += c.g; sumB += c.b
                             count++
                         }
                     }
                 }
-
                 val current = pixelColors[x][y]
-                val blurredR = if (count > 0) sumR / count else current.r
-                val blurredG = if (count > 0) sumG / count else current.g
-                val blurredB = if (count > 0) sumB / count else current.b
+                val br = if (count > 0) sumR/count else current.r
+                val bg = if (count > 0) sumG/count else current.g
+                val bb = if (count > 0) sumB/count else current.b
                 
                 temp[x][y] = RgbColor(
-                    (current.r * (255 - amount) + blurredR * amount) / 255,
-                    (current.g * (255 - amount) + blurredG * amount) / 255,
-                    (current.b * (255 - amount) + blurredB * amount) / 255
+                    (current.r * (255 - amount) + br * amount) / 255,
+                    (current.g * (255 - amount) + bg * amount) / 255,
+                    (current.b * (255 - amount) + bb * amount) / 255
                 )
             }
         }
-
-        pixelColors = temp
+        for (x in 0 until width) for (y in 0 until height) pixelColors[x][y] = temp[x][y]
     }
 
     private fun setPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
-            pixelColors[x][y] = rgb
-        }
+        if (x in 0 until width && y in 0 until height) pixelColors[x][y] = rgb
     }
 
     private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             val current = pixelColors[x][y]
             pixelColors[x][y] = RgbColor(
                 (current.r + rgb.r).coerceAtMost(255),
@@ -190,15 +148,9 @@ class CrazyBeesAnimation : LedAnimation {
     }
 
     private fun getColorFromHue(hue: Int, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = ((hue % 256) / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            return ColorUtils.hsvToRgb(hue, 255, brightness)
-        }
+        val base = getColorFromPalette(hue)
+        if (brightness < 255) return ColorUtils.scaleBrightness(base, brightness / 255.0)
+        return base
     }
 
     private inner class Bee {
@@ -213,9 +165,9 @@ class CrazyBeesAnimation : LedAnimation {
         var signY: Int = 1
         var error: Int = 0
 
-        fun setAim(width: Int, height: Int) {
-            aimX = RANDOM.nextInt(width)
-            aimY = RANDOM.nextInt(height)
+        fun setAim(w: Int, h: Int) {
+            aimX = RANDOM.nextInt(w)
+            aimY = RANDOM.nextInt(h)
             hue = RANDOM.nextInt(256)
             deltaX = abs(aimX - posX)
             deltaY = abs(aimY - posY)
@@ -224,10 +176,4 @@ class CrazyBeesAnimation : LedAnimation {
             error = deltaX - deltaY
         }
     }
-
-    companion object {
-        private val RANDOM = Random()
-        private const val MAX_BEES = 5
-    }
 }
-

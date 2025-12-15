@@ -1,23 +1,14 @@
 package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
-import kotlin.math.PI
-import kotlin.math.sin
+import com.marsraver.wledfx.math.MathUtils
 
 /**
  * TwinkleFox animation - Twinkling 'holiday' lights that fade in and out.
  * By Mark Kriegsman: https://gist.github.com/kriegsman/756ea6dcae8e30845b5a
  */
-class TwinkleFoxAnimation : LedAnimation {
+class TwinkleFoxAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
-    private var currentPalette: Palette? = null
-    private var currentColor: RgbColor = RgbColor.BLACK // SEGCOLOR(1) - background
-    private var intensity: Int = 128  // Controls twinkle density (0-255, default ~160 = 5)
-    private var speed: Int = 128     // Speed control (0-255)
     private var cool: Boolean = true // check1 - cooling effect (fade toward red)
     private var cat: Boolean = false // cat mode - instant on, fade off (twinklecat)
     
@@ -30,30 +21,12 @@ class TwinkleFoxAnimation : LedAnimation {
         cat = enabled
     }
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
     override fun supportsColor(): Boolean = true
 
-    override fun setColor(color: RgbColor) {
-        currentColor = color
-    }
-
-    override fun getColor(): RgbColor? {
-        return currentColor
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
+    override fun onInit() {
         startTimeNs = 0L
+        paramSpeed = 128
+        paramIntensity = 128
         updateSpeed()
     }
 
@@ -66,13 +39,12 @@ class TwinkleFoxAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
+        val currentPalette = getPalette()?.colors
         if (currentPalette == null || currentPalette.isEmpty()) {
             return RgbColor.BLACK
         }
 
-        val segmentLength = combinedWidth * combinedHeight
-        val pixelIndex = y * combinedWidth + x
+        val pixelIndex = y * width + x
         
         // Set up background color
         val bg = getBackgroundColor()
@@ -126,23 +98,16 @@ class TwinkleFoxAnimation : LedAnimation {
     }
 
     override fun getName(): String = "TwinkleFox"
-
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
+    override fun supportsIntensity(): Boolean = true
+    
+    fun setCool(enabled: Boolean) { cool = enabled }
 
     private fun updateSpeed() {
         // Calculate speed parameter
-        aux0 = if (speed > 100) {
-            3 + ((255 - speed) shr 3)
+        aux0 = if (paramSpeed > 100) {
+            3 + ((255 - paramSpeed) shr 3)
         } else {
-            22 + ((100 - speed) shr 1)
+            22 + ((100 - paramSpeed) shr 1)
         }
     }
 
@@ -152,12 +117,12 @@ class TwinkleFoxAnimation : LedAnimation {
         val fastcycle8 = (ticks and 0xFF)
         var slowcycle16 = ((ticks shr 8) + salt) and 0xFFFF
         
-        slowcycle16 = (slowcycle16 + sin8(slowcycle16)) and 0xFFFF
+        slowcycle16 = (slowcycle16 + MathUtils.sin8(slowcycle16)) and 0xFFFF
         slowcycle16 = ((slowcycle16 * 2053) + 1384) and 0xFFFF
         val slowcycle8 = ((slowcycle16 and 0xFF) + (slowcycle16 shr 8)) and 0xFF
         
         // Overall twinkle density (0 = NONE lit, 8 = ALL lit at once, default is 5)
-        val twinkleDensity = (intensity shr 5) + 1
+        val twinkleDensity = (paramIntensity shr 5) + 1
         
         var bright = 0
         if (((slowcycle8 and 0x0E) shr 1) < twinkleDensity) {
@@ -179,15 +144,18 @@ class TwinkleFoxAnimation : LedAnimation {
         
         val hue = (slowcycle8 - salt + 256) % 256
         return if (bright > 0) {
-            val color = getColorFromPalette(hue, bright)
+            val color = getColorFromHue(hue, bright)
             
             // Cooling effect: fade toward red as dimming (applied when cool checkbox is NOT checked)
+            // Wait, original logic: if (!cool ...) applies cooling?
+            // "Cooling effect: fade toward red as dimming" usually means RED shift.
+            // If cool=false means Warm/Redshift?
             if (!cool && fastcycle8 >= 128) {
                 val cooling = (fastcycle8 - 128) shr 4
                 RgbColor(
                     color.r,
-                    qsub8(color.g, cooling),
-                    qsub8(color.b, cooling * 2)
+                    MathUtils.qsub8(color.g, cooling),
+                    MathUtils.qsub8(color.b, cooling * 2)
                 )
             } else {
                 color
@@ -198,7 +166,7 @@ class TwinkleFoxAnimation : LedAnimation {
     }
 
     private fun getBackgroundColor(): RgbColor {
-        val bg = currentColor
+        val bg = paramColor
         val bgLight = getAverageLight(bg)
         
         // Scale background brightness
@@ -212,24 +180,18 @@ class TwinkleFoxAnimation : LedAnimation {
                 ColorUtils.scaleBrightness(bg, 1.0 / 4.0)
             }
             else -> {
-                // Dim, scale to 1/3rd
+                // Dim, scale to 1/3rd // 86/255 -> 0.337 ~ 1/3
                 ColorUtils.scaleBrightness(bg, 86.0 / 255.0)
             }
         }
     }
 
-    private fun getColorFromPalette(hue: Int, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIdx = (hue % currentPalette.size).coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIdx]
-            // Apply brightness
-            val brightFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightFactor)
-        } else {
-            // Default rainbow
-            return ColorUtils.hsvToRgb(hue, 255, brightness)
-        }
+    private fun getColorFromHue(hue: Int, brightness: Int): RgbColor {
+        // Use BaseAnimation palette if available
+        val base = getColorFromPalette(hue)
+        // Apply brightness
+        val brightFactor = brightness / 255.0
+        return ColorUtils.scaleBrightness(base, brightFactor)
     }
 
     private fun getAverageLight(color: RgbColor): Int {
@@ -239,14 +201,4 @@ class TwinkleFoxAnimation : LedAnimation {
     private fun colorBlend(color1: RgbColor, color2: RgbColor, blendAmount: Int): RgbColor {
         return ColorUtils.blend(color1, color2, blendAmount)
     }
-
-    private fun qsub8(value: Int, subtract: Int): Int {
-        return if (value > subtract) value - subtract else 0
-    }
-
-    private fun sin8(angle: Int): Int {
-        return ColorUtils.sin8(angle)
-    }
-
 }
-

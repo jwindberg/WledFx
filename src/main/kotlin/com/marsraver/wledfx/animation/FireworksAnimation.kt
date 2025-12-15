@@ -2,154 +2,179 @@ package com.marsraver.wledfx.animation
 
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
+import com.marsraver.wledfx.physics.ParticleSystem
+import com.marsraver.wledfx.physics.Particle
 import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
  * Exploding fireworks effect
- * adapted from: http://www.anirama.com/1000leds/1d-fireworks/
- * adapted for 2D WLED by blazoncek (Blaz Kristan (AKA blazoncek))
  */
-class FireworksAnimation : LedAnimation {
+class FireworksAnimation : BaseAnimation() {
 
-    private data class Spark(
-        var pos: Float = 0f,
-        var posX: Float = 0f,
-        var vel: Float = 0f,
-        var velX: Float = 0f,
-        var col: Int = 0,
-        var colIndex: Int = 0
-    )
-
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
-    private val sparks = mutableListOf<Spark>()
-    private var flare: Spark = Spark()
-    private var state: Int = 0 // 0=init, 1=launching, 2=ready to explode, 3=exploding, 4+=waiting
+    
+    // Using the new ParticleSystem
+    private val particleSystem = ParticleSystem(200)
+    
+    private var flare: Particle? = null
+    private var state: Int = 0
     private var dyingGravity: Float = 0f
     private var numSparks: Int = 0
     
-    private var speed: Int = 128 // affects gravity
-    private var intensity: Int = 128 // affects firing side on 1D
+    // Internal variable to track flare readiness for explosion since standard Particle doesn't have custom state
+    private var flareReadyToExplode = false 
+
     private var check3: Boolean = false // blur
-    
-    private var currentPalette: Palette? = null
 
-    override fun supportsPalette(): Boolean = true
+    override fun getName(): String = "Fireworks"
+    override fun is1D(): Boolean = false
+    override fun is2D(): Boolean = true
 
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        sparks.clear()
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
+        particleSystem.clear()
+        flare = null
         state = 0
         dyingGravity = 0f
-        
-        // Calculate number of sparks based on grid size
-        numSparks = (5 + ((combinedHeight * combinedWidth) / 2)).coerceAtMost(100)
+        numSparks = (5 + ((height * width) / 2)).coerceAtMost(100)
     }
 
     override fun update(now: Long): Boolean {
         // Fade out
         fadeToBlack(252)
         
-        val cols = combinedWidth
-        val rows = combinedHeight
+        val cols = width
+        val rows = height
         
-        val gravity = (-0.0004f - (speed / 800000.0f)) * rows
+        val gravity = (-0.0004f - (paramSpeed / 800000.0f)) * rows
         
         if (state < 2) { // FLARE
             if (state == 0) { // init flare
-                flare.pos = 0f
-                flare.posX = Random.nextInt(2, cols - 3).toFloat()
+                val posX = Random.nextInt(2, cols - 3).toFloat()
                 val peakHeight = (75 + Random.nextInt(180)) * (rows - 1) / 256
-                flare.vel = sqrt(-2.0f * gravity * peakHeight)
-                flare.velX = (Random.nextInt(9) - 4) / 64.0f
-                flare.col = 255 // brightness
-                flare.colIndex = Random.nextInt(256)
+                val velY = sqrt(-2.0f * gravity * peakHeight)
+                val velX = (Random.nextInt(9) - 4) / 64.0f
+                val colIndex = Random.nextInt(256)
+                
+                // Spawn flare particle
+                // Using data1 for 'brightness' simulation (starts at 255)
+                // Using sourceIndex for color index
+                flare = particleSystem.spawn(
+                    x = posX,
+                    y = 0f,
+                    vx = velX,
+                    vy = velY,
+                    ax = 0f, 
+                    ay = gravity,
+                    life = 1.0f 
+                )?.apply {
+                    data1 = 255f // Brightness
+                    sourceIndex = colIndex
+                }
+                
                 state = 1
+                flareReadyToExplode = false
             }
             
-            // launch
-            if (flare.vel > 12 * gravity) {
+            val f = flare
+            if (f != null) {
+                // Manually update flare because we want to check its velocity logic specifically
+                // or just let system update it?
+                // The original logic checked velocity > threshold to explode.
+                // Standard update applies gravity.
+                
+                f.update()
+                
                 // Draw flare
-                val x = flare.posX.toInt().coerceIn(0, cols - 1)
-                val y = (rows - flare.pos.toInt() - 1).coerceIn(0, rows - 1)
-                val color = getColorFromPalette(flare.colIndex, flare.col)
+                val x = f.x.toInt().coerceIn(0, cols - 1)
+                val y = (rows - f.y.toInt() - 1).coerceIn(0, rows - 1)
+                val color = getColorFromPaletteWithBrightness(f.sourceIndex, f.data1.toInt())
                 setPixelColor(x, y, color)
                 
-                flare.pos += flare.vel
-                flare.pos = flare.pos.coerceIn(0f, (rows - 1).toFloat())
-                flare.posX += flare.velX
-                flare.posX = flare.posX.coerceIn(0f, (cols - 1).toFloat())
-                flare.vel += gravity
-                flare.col -= 2
-            } else {
-                state = 2 // ready to explode
+                // Logic from original: if (flare.vel > 12 * gravity) -> keep going
+                // Gravity is negative. So 12 * gravity is negative.
+                // If velocity is positive (moving up) and large, it's > negative number.
+                // Eventally velocity becomes negative (falling).
+                // Wait... original: if (flare.vel > 12 * gravity). Gravity is negative (-0.00something).
+                // So 12 * gravity is a small negative number.
+                // As long as it is moving up (vel > 0) or slightly down, it continues.
+                // When it falls fast enough (vel < 12*gravity), it explodes?
+                // Yes.
+                
+                if (f.vy > 12 * gravity) {
+                    // Update brightness for trail effect
+                    f.data1 -= 2f
+                } else {
+                    state = 2 // ready to explode
+                    flareReadyToExplode = true
+                }
             }
         } else if (state < 4) {
             // Explode!
             if (state == 2) {
-                var nSparks = (flare.pos + Random.nextInt(4)).toInt()
-                nSparks = nSparks.coerceAtLeast(4).coerceAtMost(numSparks)
-                
-                // Initialize sparks
-                sparks.clear()
-                for (i in 0 until nSparks) {
-                    val spark = Spark()
-                    spark.pos = flare.pos
-                    spark.posX = flare.posX
-                    spark.vel = (Random.nextFloat() * 2.0f - 0.9f) // from -0.9 to 1.1
-                    spark.vel *= if (rows < 32) 0.5f else 1.0f // reduce velocity for smaller strips
-                    spark.velX = (Random.nextFloat() * 2.0f - 1.0f) // from -1 to 1
-                    spark.col = 345
-                    spark.colIndex = Random.nextInt(256)
-                    spark.vel *= flare.pos / rows // proportional to height
-                    spark.velX *= flare.posX / cols // proportional to width
-                    spark.vel *= -gravity * 50
-                    sparks.add(spark)
+                val f = flare
+                if (f != null) {
+                    var nSparks = (f.y + Random.nextInt(4)).toInt()
+                    nSparks = nSparks.coerceAtLeast(4).coerceAtMost(numSparks)
+                    
+                    particleSystem.clear() // Clear flare
+                    
+                    for (i in 0 until nSparks) {
+                        val velY = (Random.nextFloat() * 2.0f - 0.9f) * (if (rows < 32) 0.5f else 1.0f) * (f.y / rows) * (-gravity * 50)
+                        val velX = (Random.nextFloat() * 2.0f - 1.0f) * (f.x / cols) * (-gravity * 50)
+                        
+                        // data1 = brightness/prog (starts 345 in original?)
+                        // Original: spark.col = 345.
+                        particleSystem.spawn(
+                            x = f.x,
+                            y = f.y,
+                            vx = velX,
+                            vy = velY,
+                            ax = 0f, // Gravity added during explosion phase
+                            ay = 0f,
+                            life = 1.0f
+                        )?.apply {
+                            data1 = 345f
+                            sourceIndex = Random.nextInt(256)
+                        }
+                    }
                 }
-                
                 dyingGravity = gravity / 2
                 state = 3
             }
             
-            if (sparks.isNotEmpty() && sparks[0].col > 4) {
-                for (spark in sparks) {
-                    spark.pos += spark.vel
-                    spark.posX += spark.velX
-                    spark.vel += dyingGravity
-                    spark.velX += dyingGravity
-                    if (spark.col > 3) spark.col -= 4
+            // Update sparks
+            // We need to apply 'dyingGravity' to them which changes over time
+            val particles = particleSystem.particles
+            if (particles.isNotEmpty() && particles[0].data1 > 4) {
+                 val iter = particles.iterator()
+                 while(iter.hasNext()) {
+                    val p = iter.next()
                     
-                    if (spark.pos > 0 && spark.pos < rows) {
-                        val x = spark.posX.toInt()
+                    // Custom physics for explosion
+                    p.vx += dyingGravity
+                    p.vy += dyingGravity // Original logic added dyingGravity to BOTH x and y velocity? Weird but ok.
+                    
+                    p.update()
+                    
+                    if (p.data1 > 3f) p.data1 -= 4f
+                    
+                    if (p.y > 0 && p.y < rows) {
+                        val x = p.x.toInt()
                         if (x >= 0 && x < cols) {
-                            val y = (rows - spark.pos.toInt() - 1).coerceIn(0, rows - 1)
-                            val prog = spark.col
+                            val y = (rows - p.y.toInt() - 1).coerceIn(0, rows - 1)
+                            val prog = p.data1.toInt()
                             
-                            val spColor = getColorFromPalette(spark.colIndex, 255)
+                            val spColor = getColorFromPaletteWithBrightness(p.sourceIndex, 255)
                             val c = when {
                                 prog > 300 -> {
-                                    // Fade from white to spark color
                                     val blend = ((prog - 300) * 5).coerceIn(0, 255)
                                     ColorUtils.blend(RgbColor.WHITE, spColor, blend)
                                 }
                                 prog > 45 -> {
-                                    // Fade from spark color to black
                                     val blend = (prog - 45).coerceIn(0, 255)
                                     val color = ColorUtils.blend(RgbColor.BLACK, spColor, blend)
-                                    // Cooling effect - reduce green and blue
                                     val cooling = (300 - prog) / 32
                                     RgbColor(
                                         color.r,
@@ -159,64 +184,45 @@ class FireworksAnimation : LedAnimation {
                                 }
                                 else -> RgbColor.BLACK
                             }
-                            
                             setPixelColor(x, y, c)
                         }
                     }
-                }
-                
-                if (check3) {
-                    blur()
-                }
-                
-                dyingGravity *= 0.8f // as sparks burn out they fall slower
+                 }
+
+                if (check3) blur()
+                dyingGravity *= 0.8f
             } else {
-                state = 6 + Random.nextInt(10) // wait for this many frames
+                state = 6 + Random.nextInt(10)
             }
         } else {
             state--
-            if (state < 4) {
-                state = 0 // back to flare
-            }
+            if (state < 4) state = 0
         }
-        
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (::pixelColors.isInitialized && x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (::pixelColors.isInitialized && x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
         }
     }
 
-    override fun getName(): String = "Fireworks"
-
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
-
     override fun cleanup() {
-        sparks.clear()
+        particleSystem.clear()
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y] = color
         }
     }
 
     private fun fadeToBlack(amount: Int) {
         val factor = (255 - amount).coerceIn(0, 255) / 255.0
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
@@ -224,9 +230,9 @@ class FireworksAnimation : LedAnimation {
 
     private fun blur() {
         // Simple box blur
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        for (x in 1 until combinedWidth - 1) {
-            for (y in 1 until combinedHeight - 1) {
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
+        for (x in 1 until width - 1) {
+            for (y in 1 until height - 1) {
                 var r = 0
                 var g = 0
                 var b = 0
@@ -241,25 +247,23 @@ class FireworksAnimation : LedAnimation {
                 temp[x][y] = RgbColor(r / 9, g / 9, b / 9)
             }
         }
-        for (x in 1 until combinedWidth - 1) {
-            for (y in 1 until combinedHeight - 1) {
+        for (x in 1 until width - 1) {
+            for (y in 1 until height - 1) {
                 pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
-    private fun getColorFromPalette(colorIndex: Int, brightness: Int): RgbColor {
-        val palette = currentPalette
-        if (palette != null && palette.colors.isNotEmpty()) {
-            val paletteIndex = (colorIndex % 256 * palette.colors.size / 256).coerceIn(0, palette.colors.size - 1)
-            val baseColor = palette.colors[paletteIndex]
+    private fun getColorFromPaletteWithBrightness(colorIndex: Int, brightness: Int): RgbColor {
+        val palette = paramPalette?.colors
+        if (palette != null && palette.isNotEmpty()) {
+            val paletteIndex = (colorIndex % 256 * palette.size / 256).coerceIn(0, palette.size - 1)
+            val baseColor = palette[paletteIndex]
             val brightnessFactor = brightness / 255.0
             return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
         } else {
-            // Use color wheel
             val hue = (colorIndex * 360 / 256).toFloat()
             return ColorUtils.hsvToRgb(hue, 1.0f, brightness / 255.0f)
         }
     }
 }
-

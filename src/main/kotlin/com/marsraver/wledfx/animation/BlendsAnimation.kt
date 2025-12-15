@@ -1,93 +1,63 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
-import kotlin.math.*
+import com.marsraver.wledfx.math.MathUtils
 
 /**
  * Blends animation - Smoothly blends random colors across the palette.
- * Modified, originally by Mark Kriegsman
  */
-class BlendsAnimation : LedAnimation {
+class BlendsAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
-    private var currentPalette: Palette? = null
-    
     private lateinit var pixelColors: Array<Array<RgbColor>>
     private var startTime: Long = 0L
 
-    override fun supportsPalette(): Boolean = true
+    override fun getName(): String = "Blends"
+    override fun is1D(): Boolean = false
+    override fun is2D(): Boolean = true
 
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        startTime = 0L
+    override fun onInit() {
+         pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
+         startTime = 0L
     }
 
     override fun update(now: Long): Boolean {
-        if (startTime == 0L) {
-            startTime = now
-        }
+        if (startTime == 0L) startTime = now
         
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette == null || currentPalette.isEmpty()) {
-            return true
-        }
+        val palette = paramPalette?.colors
+        if (palette == null || palette.isEmpty()) return true
         
-        val intensity = 128 // Default intensity (0-255)
-        val blendSpeed = mapRange(intensity.toDouble(), 0.0, 255.0, 5.0, 30.0).toInt() // Slower blending
-        val speed = 32 // Default speed (0-255) - reduced for slower animation
-        val shiftSpeed = (speed shr 3) + 1
+        val blendSpeed = MathUtils.map(paramIntensity, 0, 255, 5, 30)
+        val shiftSpeed = (paramSpeed shr 3) + 1
         val timeMs = (now - startTime) / 1_000_000L
-        val shift = ((timeMs * shiftSpeed) / 512).toInt() // Increased divisor to slow down shift
+        val shift = ((timeMs * shiftSpeed) / 512).toInt()
         
-        for (y in 0 until combinedHeight) {
-            for (x in 0 until combinedWidth) {
-                val pixelIndex = y * combinedWidth + x
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val pixelIndex = y * width + x
                 val currentShift = shift + (pixelIndex * 3)
                 
-                // Use quadwave8 function: creates a smooth wave pattern
-                val waveValue = quadwave8(((pixelIndex + 1) * 16).toInt())
-                val paletteIndex = ((currentShift + waveValue) % 256) % currentPalette.size
-                val targetColor = currentPalette[paletteIndex]
+                val waveValue = quadwave8(((pixelIndex + 1) * 16))
+                val paletteIndex = ((currentShift + waveValue) % 256) % palette.size
+                val targetColor = palette[paletteIndex]
                 
-                // Blend current color towards target color
                 val currentColor = pixelColors[x][y]
                 pixelColors[x][y] = colorBlend(currentColor, targetColor, blendSpeed)
             }
         }
-        
         return true
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
         }
     }
-
-    override fun getName(): String = "Blends"
-
-    /**
-     * Quadwave8 - creates a smooth wave pattern from 0-255
-     * Similar to sin wave but with different curve
-     */
+    
     private fun quadwave8(x: Int): Int {
         val normalized = (x % 256) / 255.0
-        // Create a quadratic wave: goes up, then down
         val wave = if (normalized < 0.5) {
             4 * normalized * normalized
         } else {
@@ -96,22 +66,7 @@ class BlendsAnimation : LedAnimation {
         return (wave * 255).toInt().coerceIn(0, 255)
     }
 
-    /**
-     * Blend two colors together
-     * blendSpeed: higher = faster blend (0-255)
-     */
     private fun colorBlend(color1: RgbColor, color2: RgbColor, blendSpeed: Int): RgbColor {
-        val blendFactor = blendSpeed.coerceIn(0, 255) / 255.0
-        val invBlend = 1.0 - blendFactor
-        return RgbColor(
-            ((color1.r * invBlend + color2.r * blendFactor)).toInt().coerceIn(0, 255),
-            ((color1.g * invBlend + color2.g * blendFactor)).toInt().coerceIn(0, 255),
-            ((color1.b * invBlend + color2.b * blendFactor)).toInt().coerceIn(0, 255)
-        )
-    }
-
-    private fun mapRange(value: Double, inMin: Double, inMax: Double, outMin: Double, outMax: Double): Double {
-        return ((value - inMin) * (outMax - outMin) / (inMax - inMin)) + outMin
+        return ColorUtils.blend(color1, color2, blendSpeed)
     }
 }
-

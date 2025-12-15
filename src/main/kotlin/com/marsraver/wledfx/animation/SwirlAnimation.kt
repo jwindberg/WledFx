@@ -1,44 +1,30 @@
 package com.marsraver.wledfx.animation
+
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
+import com.marsraver.wledfx.math.MathUtils
 import com.marsraver.wledfx.audio.LoudnessMeter
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
  * Swirl animation - Audio-reactive swirling pixels with mirrored patterns.
  */
-class SwirlAnimation : LedAnimation {
+class SwirlAnimation : BaseAnimation() {
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
-    private var pixelColors: Array<Array<RgbColor>> = emptyArray()
-    private var currentPalette: Palette? = null
-
-    private var speed: Int = 128
-    private var intensity: Int = 64
+    private lateinit var pixelColors: Array<Array<RgbColor>>
+    
     private var custom1: Int = 16
     private var fadeAmount: Int = 4
-
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
+    
     private var loudnessMeter: LoudnessMeter? = null
 
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
         loudnessMeter = LoudnessMeter()
+        paramSpeed = 128
+        paramIntensity = 64
+        custom1 = 16
+        fadeAmount = 4
     }
 
     override fun update(now: Long): Boolean {
@@ -57,15 +43,15 @@ class SwirlAnimation : LedAnimation {
         if (custom1 > 0) applyBlur(custom1)
 
         val timeMs = now / 1_000_000
-        var freq1 = (27 * speed) / 255
-        var freq2 = (41 * speed) / 255
+        var freq1 = (27 * paramSpeed) / 255
+        var freq2 = (41 * paramSpeed) / 255
         if (freq1 < 1) freq1 = 1
         if (freq2 < 1) freq2 = 1
 
-        val i = beatsin8(freq1, BORDER_WIDTH, combinedWidth - BORDER_WIDTH, timeMs)
-        val j = beatsin8(freq2, BORDER_WIDTH, combinedHeight - BORDER_WIDTH, timeMs)
-        val ni = combinedWidth - 1 - i
-        val nj = combinedHeight - 1 - j
+        val i = MathUtils.beatsin8(freq1, BORDER_WIDTH, width - BORDER_WIDTH, timeMs)
+        val j = MathUtils.beatsin8(freq2, BORDER_WIDTH, height - BORDER_WIDTH, timeMs)
+        val ni = width - 1 - i
+        val nj = height - 1 - j
 
         val baseBrightness = 200
         val audioBoost = rawVolume / 2
@@ -96,7 +82,7 @@ class SwirlAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -106,55 +92,33 @@ class SwirlAnimation : LedAnimation {
     override fun getName(): String = "Swirl"
 
     override fun isAudioReactive(): Boolean = true
-
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
+    override fun supportsIntensity(): Boolean = true // Although used as 'paramIntensity' is mapped to something
+    // Original mapped intensity to field 'intensity', default 64. 
+    // Wait, original file had `private var intensity: Int = 64`.
+    // It used `intensity` in logic? No, only defined.
+    // Ah, wait. The original code defined 'intensity' but didn't seem to Use it in update().
+    // It used 'custom1' (16) and 'fadeAmount' (4).
+    // Let's stick to using params if possible or just use custom settings.
 
     override fun cleanup() {
         loudnessMeter?.stop()
         loudnessMeter = null
     }
 
-    private fun beatsin8(frequency: Int, minVal: Int, maxVal: Int, timebase: Long): Int {
-        val phase = timebase * frequency / 255.0
-        val sine = sin(phase)
-        val range = maxVal - minVal
-        return minVal + ((sine + 1.0) * range / 2.0).roundToInt()
-    }
-
     private fun fadeToBlack(amount: Int) {
-        when {
-            amount <= 0 -> return
-            amount >= 255 -> {
-                for (x in 0 until combinedWidth) {
-                    for (y in 0 until combinedHeight) {
-                        pixelColors[x][y] = RgbColor.BLACK
-                    }
-                }
-            }
-            else -> {
-                val factor = (255 - amount) / 255.0
-                for (x in 0 until combinedWidth) {
-                    for (y in 0 until combinedHeight) {
-                        pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
-                    }
-                }
+        val factor = (255 - amount).coerceIn(0, 255) / 255.0
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                pixelColors[x][y] = ColorUtils.scaleBrightness(pixelColors[x][y], factor)
             }
         }
     }
 
     private fun applyBlur(amount: Int) {
         if (amount <= 0) return
-        val temp = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        val temp = Array(width) { Array(height) { RgbColor.BLACK } }
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 var sumR = 0
                 var sumG = 0
                 var sumB = 0
@@ -163,7 +127,7 @@ class SwirlAnimation : LedAnimation {
                     for (dy in -1..1) {
                         val nx = x + dx
                         val ny = y + dy
-                        if (nx in 0 until combinedWidth && ny in 0 until combinedHeight) {
+                        if (nx in 0 until width && ny in 0 until height) {
                             val color = pixelColors[nx][ny]
                             sumR += color.r
                             sumG += color.g
@@ -183,15 +147,15 @@ class SwirlAnimation : LedAnimation {
                 )
             }
         }
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 pixelColors[x][y] = temp[x][y]
             }
         }
     }
 
     private fun addPixelColor(x: Int, y: Int, rgb: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             val current = pixelColors[x][y]
             pixelColors[x][y] = RgbColor(
                 (current.r + rgb.r).coerceAtMost(255),
@@ -202,22 +166,11 @@ class SwirlAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(colorIndexValue: Int, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            var colorIndex = colorIndexValue % 256
-            if (colorIndex < 0) colorIndex += 256
-            val paletteIndex = (colorIndex / 256.0 * currentPalette.size).toInt().coerceIn(0, currentPalette.size - 1)
-            val baseColor = currentPalette[paletteIndex]
-            val brightnessFactor = brightness / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            var colorIndex = colorIndexValue % 256
-            if (colorIndex < 0) colorIndex += 256
-            val h = colorIndex / 255.0f * 360.0f
-            val s = 1.0f
-            val v = brightness / 255.0f
-            return ColorUtils.hsvToRgb(h, s, v)
-        }
+        val colorIndex = (colorIndexValue % 256 + 256) % 256
+        // BaseAnimation helper
+        val base = getColorFromPalette(colorIndex)
+        val brightnessFactor = brightness / 255.0
+        return ColorUtils.scaleBrightness(base, brightnessFactor)
     }
 
     companion object {
@@ -225,4 +178,3 @@ class SwirlAnimation : LedAnimation {
         private const val NOISE_FLOOR = 100
     }
 }
-

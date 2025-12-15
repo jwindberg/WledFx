@@ -1,15 +1,13 @@
 package com.marsraver.wledfx.animation
 import com.marsraver.wledfx.color.RgbColor
 import com.marsraver.wledfx.color.ColorUtils
-import com.marsraver.wledfx.color.Palette
-
 import kotlin.random.Random
 
 /**
  * Game of Life animation - Conway's Game of Life cellular automaton
  * Written by Ewoud Wijma, inspired by natureofcode.com, Modified By: Brandon Butler
  */
-class GameOfLifeAnimation : LedAnimation {
+class GameOfLifeAnimation : BaseAnimation() {
 
     private data class Cell(
         var alive: Boolean = false,
@@ -20,14 +18,9 @@ class GameOfLifeAnimation : LedAnimation {
         var spaceshipCheck: Boolean = false
     )
 
-    private var combinedWidth: Int = 0
-    private var combinedHeight: Int = 0
     private lateinit var pixelColors: Array<Array<RgbColor>>
     private lateinit var cells: Array<Array<Cell>>
-    private var currentPalette: Palette? = null
     
-    private var speed: Int = 128
-    private var intensity: Int = 128
     private var custom1: Int = 128  // Blur
     private var check3: Boolean = false  // Mutation
     
@@ -37,32 +30,23 @@ class GameOfLifeAnimation : LedAnimation {
     private var startTimeNs: Long = 0L
     private val random = Random.Default
 
-    override fun supportsPalette(): Boolean = true
-
-    override fun setPalette(palette: Palette) {
-        this.currentPalette = palette
-    }
-
-    override fun getPalette(): Palette? {
-        return currentPalette
-    }
-
-    override fun init(combinedWidth: Int, combinedHeight: Int) {
-        this.combinedWidth = combinedWidth
-        this.combinedHeight = combinedHeight
-        pixelColors = Array(combinedWidth) { Array(combinedHeight) { RgbColor.BLACK } }
-        cells = Array(combinedWidth) { Array(combinedHeight) { Cell() } }
+    override fun onInit() {
+        pixelColors = Array(width) { Array(height) { RgbColor.BLACK } }
+        cells = Array(width) { Array(height) { Cell() } }
         startTimeNs = System.nanoTime()
+        paramSpeed = 128
+        paramIntensity = 128
         
         // Calculate glider length LCM(rows,cols)*4
-        var a = combinedHeight
-        var b = combinedWidth
+        var a = height
+        var b = width
         while (b != 0) {
             val t = b
             b = a % b
             a = t
         }
-        gliderLength = (combinedWidth * combinedHeight / a) shl 2
+        val safeA = if (a == 0) 1 else a
+        gliderLength = (width * height / safeA) shl 2
         
         generation = 0
         step = 0L
@@ -71,7 +55,6 @@ class GameOfLifeAnimation : LedAnimation {
     override fun update(now: Long): Boolean {
         val timeMs = (now - startTimeNs) / 1_000_000
         
-        val maxIndex = combinedWidth * combinedHeight
         val mutate = check3
         val blur = map(custom1, 0, 255, 255, 4)
         
@@ -93,13 +76,13 @@ class GameOfLifeAnimation : LedAnimation {
             generation = 1
             
             // Setup Grid
-            for (x in 0 until combinedWidth) {
-                for (y in 0 until combinedHeight) {
+            for (x in 0 until width) {
+                for (y in 0 until height) {
                     cells[x][y] = Cell()
                     val isAlive = random.nextInt(3) == 0  // ~33%
                     cells[x][y].alive = isAlive
                     cells[x][y].faded = !isAlive
-                    cells[x][y].edgeCell = (x == 0 || x == combinedWidth - 1 || y == 0 || y == combinedHeight - 1)
+                    cells[x][y].edgeCell = (x == 0 || x == width - 1 || y == 0 || y == height - 1)
                     
                     val color = if (isAlive) {
                         colorFromPalette(random.nextInt(256), false, 0)
@@ -112,12 +95,12 @@ class GameOfLifeAnimation : LedAnimation {
             return true
         }
         
-        val updateInterval = 1000 / map(speed, 0, 255, 1, 42)
+        val updateInterval = 1000 / map(paramSpeed, 0, 255, 1, 42)
         
         if (paused || (timeMs - step < updateInterval)) {
             // Redraw if paused or between updates to remove blur
-            for (x in 0 until combinedWidth) {
-                for (y in 0 until combinedHeight) {
+            for (x in 0 until width) {
+                for (y in 0 until height) {
                     if (!cells[x][y].alive) {
                         val cellColor = getPixelColor(x, y)
                         if (cellColor != bgColor) {
@@ -148,8 +131,8 @@ class GameOfLifeAnimation : LedAnimation {
         var emptyGrid = true
         
         // Update cells
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 val cell = cells[x][y]
                 
                 if (cell.alive) emptyGrid = false
@@ -171,10 +154,10 @@ class GameOfLifeAnimation : LedAnimation {
                         var nY = y + i
                         
                         if (cell.edgeCell) {
-                            nX = (nX + combinedWidth) % combinedWidth
-                            nY = (nY + combinedHeight) % combinedHeight
+                            nX = (nX + width) % width
+                            nY = (nY + height) % height
                         } else {
-                            if (nX < 0 || nX >= combinedWidth || nY < 0 || nY >= combinedHeight) continue
+                            if (nX < 0 || nX >= width || nY < 0 || nY >= height) continue
                         }
                         
                         val neighbor = cells[nX][nY]
@@ -238,8 +221,8 @@ class GameOfLifeAnimation : LedAnimation {
         }
         
         // Apply toggles
-        for (x in 0 until combinedWidth) {
-            for (y in 0 until combinedHeight) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
                 val cell = cells[x][y]
                 if (cell.toggleStatus) {
                     cell.alive = !cell.alive
@@ -260,7 +243,7 @@ class GameOfLifeAnimation : LedAnimation {
     }
 
     override fun getPixelColor(x: Int, y: Int): RgbColor {
-        return if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        return if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y]
         } else {
             RgbColor.BLACK
@@ -268,33 +251,18 @@ class GameOfLifeAnimation : LedAnimation {
     }
 
     override fun getName(): String = "Game Of Life"
+    override fun supportsIntensity(): Boolean = true
 
-    override fun supportsSpeed(): Boolean = true
-
-    override fun setSpeed(speed: Int) {
-        this.speed = speed.coerceIn(0, 255)
-    }
-
-    override fun getSpeed(): Int? {
-        return speed
-    }
-
-    /**
-     * Set custom1 (Blur)
-     */
     fun setCustom1(value: Int) {
         this.custom1 = value.coerceIn(0, 255)
     }
 
-    /**
-     * Set check3 (Mutation)
-     */
     fun setCheck3(enabled: Boolean) {
         this.check3 = enabled
     }
 
     private fun setPixelColor(x: Int, y: Int, color: RgbColor) {
-        if (x in 0 until combinedWidth && y in 0 until combinedHeight) {
+        if (x in 0 until width && y in 0 until height) {
             pixelColors[x][y] = color
         }
     }
@@ -308,19 +276,9 @@ class GameOfLifeAnimation : LedAnimation {
     }
 
     private fun colorFromPalette(index: Int, wrap: Boolean, brightness: Int): RgbColor {
-        val currentPalette = this.currentPalette?.colors
-        if (currentPalette != null && currentPalette.isNotEmpty()) {
-            val paletteIndex = if (wrap) {
-                (index % 256) * currentPalette.size / 256
-            } else {
-                ((index % 256) * currentPalette.size / 256).coerceIn(0, currentPalette.size - 1)
-            }
-            val baseColor = currentPalette[paletteIndex.coerceIn(0, currentPalette.size - 1)]
-            val brightnessFactor = brightness.coerceIn(0, 255) / 255.0
-            return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
-        } else {
-            return ColorUtils.hsvToRgb(index, 255, brightness.coerceIn(0, 255))
-        }
+        // Use default getColorFromPalette behavior but with scaling
+        val baseColor = getColorFromPalette(index)
+        val brightnessFactor = brightness.coerceIn(0, 255) / 255.0
+        return ColorUtils.scaleBrightness(baseColor, brightnessFactor)
     }
 }
-
