@@ -3,6 +3,7 @@ package com.marsraver.wledfx
 import com.marsraver.wledfx.animation.LedAnimation
 import com.marsraver.wledfx.animation.*
 import com.marsraver.wledfx.animation.NoneAnimation
+import com.marsraver.wledfx.animation.SpinningGlobeAnimation
 
 /**
  * Registry for creating animation instances and managing animation metadata.
@@ -105,6 +106,7 @@ object AnimationRegistry {
         "Space Ships" to { SpaceShipsAnimation() },
         "Drip" to { DripAnimation() },
         "Popcorn" to { PopcornAnimation() },
+        "Spinning Globe" to { SpinningGlobeAnimation() },
         "Starburst" to { StarburstAnimation() },
         "Sparkle" to { SparkleAnimation() },
         "Spectrogram" to { SpectrogramAnimation() },

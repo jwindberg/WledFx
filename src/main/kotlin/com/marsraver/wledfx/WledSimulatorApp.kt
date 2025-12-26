@@ -773,11 +773,7 @@ class WledSimulatorApp : Application() {
                                 val rgb = applyBrightness(animation.getPixelColor(sampleX, sampleY))
                                 // Standard row-major mapping: LED 0 at top-left (0,0), goes left-to-right, top-to-bottom
                                 // Grid01 is mirrored, so invert X coordinate for LED index
-                                val mappedX = if (device.config.name == "Grid01") {
-                                    device.width - 1 - localX
-                                } else {
-                                    localX
-                                }
+                                val mappedX = localX
                                 val localLedIndex = localY * device.width + mappedX
                                 rgbData[localLedIndex * 3] = rgb.r
                                 rgbData[localLedIndex * 3 + 1] = rgb.g
